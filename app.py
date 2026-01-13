@@ -1,30 +1,33 @@
-from flask import Flask, request, jsonify
 import os
+import asyncio
+from flask import Flask, request, Response
+from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
+from botbuilder.schema import Activity
 from openai import AzureOpenAI
 
 app = Flask(__name__)
 
-client = AzureOpenAI(
+# Bot Framework settings
+settings = BotFrameworkAdapterSettings(
+    app_id=os.environ.get("MICROSOFT_APP_ID", ""),
+    app_password=os.environ.get("MICROSOFT_APP_PASSWORD", "")
+)
+adapter = BotFrameworkAdapter(settings)
+
+# Azure OpenAI client
+openai_client = AzureOpenAI(
     api_key=os.environ.get("AZURE_OPENAI_KEY"),
     api_version="2024-02-01",
     azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")
 )
 
-@app.route("/")
-def home():
-    return "Bot is running!"
-
-@app.route("/api/messages", methods=["POST"])
-def messages():
-    try:
-        body = request.get_json()
-        activity_type = body.get("type", "")
+async def on_turn(turn_context: TurnContext):
+    if turn_context.activity.type == "message":
+        user_text = turn_context.activity.text
         
-        if activity_type == "message":
-            user_text = body.get("text", "")
-            
-            if user_text:
-                response = client.chat.completions.create(
+        if user_text:
+            try:
+                response = openai_client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": "You are a helpful recruitment assistant."},
@@ -32,22 +35,36 @@ def messages():
                     ]
                 )
                 reply_text = response.choices[0].message.content
-            else:
-                reply_text = "Send me a CV and I'll create an anonymised spec email."
-            
-            return jsonify({
-                "type": "message",
-                "from": body.get("recipient"),
-                "recipient": body.get("from"),
-                "conversation": body.get("conversation"),
-                "text": reply_text,
-                "replyToId": body.get("id")
-            })
+            except Exception as e:
+                reply_text = f"Error calling AI: {str(e)}"
+        else:
+            reply_text = "Send me a CV and I'll create an anonymised spec email."
         
-        return "", 200
+        await turn_context.send_activity(reply_text)
+
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+@app.route("/api/messages", methods=["POST"])
+def messages():
+    if "application/json" in request.headers.get("Content-Type", ""):
+        body = request.json
+    else:
+        return Response(status=415)
     
-    except Exception as e:
-        return jsonify({"type": "message", "text": f"Error: {str(e)}"})
+    activity = Activity().deserialize(body)
+    auth_header = request.headers.get("Authorization", "")
+    
+    async def call_bot():
+        await adapter.process_activity(activity, auth_header, on_turn)
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(call_bot())
+    loop.close()
+    
+    return Response(status=200)
 
 if __name__ == "__main__":
     app.run()
