@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "6aa3330e-eba0-4497-b067-66286829aef6",
+  "packageName": "com.meraki.cvbot",
+  "developer": {
+    "name": "Meraki Talent",
+    "websiteUrl": "https://merakitalent.com",
+    "privacyUrl": "https://merakitalent.com/privacy",
+    "termsOfUseUrl": "https://merakitalent.com/terms"
+  },
+  "name": {
+    "short": "CV Spec Bot",
+    "full": "CV Spec Generator Bot"
+  },
+  "description": {
+    "short": "Generate anonymised CV specs",
+    "full": "Upload a CV and get an anonymised candidate spec email ready to send to clients."
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#5558AF",
+  "bots": [
+    {
+      "botId": "6aa3330e-eba0-4497-b067-66286829aef6",
+      "scopes": ["personal", "team", "groupchat"],
+      "supportsFiles": true,
+      "isNotificationOnly": false
+    }
+  ],
+  "permissions": ["messageTeamMembers"],
+  "validDomains": ["meraki-teams-bot-production.up.railway.app"]
+}
