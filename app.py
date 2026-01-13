@@ -7,10 +7,11 @@ from openai import AzureOpenAI
 
 app = Flask(__name__)
 
-# Bot Framework settings
+# Bot Framework settings for Single Tenant
 settings = BotFrameworkAdapterSettings(
     app_id=os.environ.get("MICROSOFT_APP_ID", ""),
-    app_password=os.environ.get("MICROSOFT_APP_PASSWORD", "")
+    app_password=os.environ.get("MICROSOFT_APP_PASSWORD", ""),
+    channel_auth_tenant=os.environ.get("MICROSOFT_APP_TENANT_ID", "")
 )
 adapter = BotFrameworkAdapter(settings)
 
