@@ -1,4 +1,4 @@
 flask
-openai
 gunicorn
+openai
 PyPDF2
