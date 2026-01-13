@@ -18,7 +18,6 @@ def home():
 def messages():
     try:
         body = request.get_json()
-        
         activity_type = body.get("type", "")
         
         if activity_type == "message":
@@ -36,7 +35,6 @@ def messages():
             else:
                 reply_text = "Send me a CV and I'll create an anonymised spec email."
             
-            # Return Bot Framework response
             return jsonify({
                 "type": "message",
                 "from": body.get("recipient"),
@@ -49,12 +47,7 @@ def messages():
         return "", 200
     
     except Exception as e:
-        return jsonify({
-            "type": "message",
-            "text": f"Error: {str(e)}"
-        })
+        return jsonify({"type": "message", "text": f"Error: {str(e)}"})
 
 if __name__ == "__main__":
     app.run()
-```
-

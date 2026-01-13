@@ -2,6 +2,3 @@ flask
 gunicorn
 openai
 PyPDF2
-botbuilder-core
-botbuilder-schema
-aiohttp
