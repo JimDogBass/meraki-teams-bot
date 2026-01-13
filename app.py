@@ -7,7 +7,6 @@ from openai import AzureOpenAI
 
 app = Flask(__name__)
 
-# Bot Framework settings for Single Tenant
 settings = BotFrameworkAdapterSettings(
     app_id=os.environ.get("MICROSOFT_APP_ID", ""),
     app_password=os.environ.get("MICROSOFT_APP_PASSWORD", ""),
@@ -15,12 +14,51 @@ settings = BotFrameworkAdapterSettings(
 )
 adapter = BotFrameworkAdapter(settings)
 
-# Azure OpenAI client
 openai_client = AzureOpenAI(
     api_key=os.environ.get("AZURE_OPENAI_KEY"),
     api_version="2024-02-01",
     azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")
 )
+
+SYSTEM_PROMPT = """You are a recruitment consultant assistant. When given CV information or candidate details, create an anonymised candidate spec email.
+
+RULES:
+- Anonymise all company names (e.g., "RE Mega Fund", "Big 4 Accountancy Firm", "Global Investment Bank", "Leading Asset Manager", "Top-Tier PE Fund")
+- Include company size/AUM where relevant (e.g., "RE Fund > $20bn AUM")
+- Only include the last 2 roles
+- Include 3-4 bullet points per role highlighting achievements and responsibilities
+- Anonymise university names (e.g., "Top 100 College", "Russell Group University", "Top Tier Business School")
+- Do not include candidate name, contact details, or any identifying information
+- Do not include gender
+- Do not include pronouns that reveal gender - use "they/their"
+
+FORMAT (follow exactly):
+
+Subject: Candidate Spec - [Seniority] [Function] - [Location]
+
+Hi
+
+I am working with an exceptional [Function] professional who has a solid background within [Industry/Sector]. They are actively seeking a new opportunity in [Location].
+
+I have highlighted some of their career below; let me know if you would be interested in seeing a full resume or would be interested in having a chat about the general market.
+
+[Anonymised Company Description] | [Location]
+[Role Title] ([Dates])
+- [Achievement/responsibility]
+- [Achievement/responsibility]
+- [Achievement/responsibility]
+- [Achievement/responsibility]
+
+[Anonymised Company Description] | [Location]
+[Role Title] ([Dates])
+- [Achievement/responsibility]
+- [Achievement/responsibility]
+- [Achievement/responsibility]
+
+Education
+[Anonymised University Description] - [Degree], [Specialization] ([Year])
+
+For general questions not about CVs, respond helpfully as a recruitment assistant."""
 
 async def on_turn(turn_context: TurnContext):
     if turn_context.activity.type == "message":
@@ -31,7 +69,7 @@ async def on_turn(turn_context: TurnContext):
                 response = openai_client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
-                        {"role": "system", "content": "You are a helpful recruitment assistant."},
+                        {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_text}
                     ]
                 )
@@ -39,7 +77,7 @@ async def on_turn(turn_context: TurnContext):
             except Exception as e:
                 reply_text = f"Error calling AI: {str(e)}"
         else:
-            reply_text = "Send me a CV and I'll create an anonymised spec email."
+            reply_text = "Send me CV details and I'll create an anonymised spec email for you."
         
         await turn_context.send_activity(reply_text)
 
