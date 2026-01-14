@@ -528,12 +528,14 @@ async def on_turn(turn_context: TurnContext):
             roles = get_roles()
             role = roles[role_id]
             set_pending_role(conversation_id, role_id)  # Remember the selection
+            print(f"[DEBUG] Set pending role: conversation_id={conversation_id}, role_id={role_id}")
             await turn_context.send_activity(f"Great! Send me the content for **{role['name']}** - you can paste text or upload a PDF/Word file.")
             return
 
         # If no role identified, check for pending role from previous button click
         if not role_id:
             pending = get_pending_role(conversation_id)
+            print(f"[DEBUG] No role_id. conversation_id={conversation_id}, pending={pending}, has_content={bool(combined_input)}, content_starts_with_bracket={combined_input[:20] if combined_input else 'N/A'}")
             if pending and combined_input and not combined_input.startswith('['):
                 # Use the pending role from button click
                 role_id = pending
