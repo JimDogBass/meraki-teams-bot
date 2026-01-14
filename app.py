@@ -2,6 +2,7 @@ import os
 import asyncio
 import io
 import time
+import base64
 import httpx
 from flask import Flask, request, Response
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
@@ -10,6 +11,7 @@ from openai import AzureOpenAI
 from PyPDF2 import PdfReader
 from docx import Document
 from azure.data.tables import TableServiceClient
+from cv_generator import create_meraki_cv, parse_cv_json, CV_EXTRACTION_PROMPT
 
 app = Flask(__name__)
 
@@ -238,30 +240,8 @@ Just output the message, nothing else."""
             "trigger": "reformat",
             "aliases": ["format", "template"],
             "icon": "ArrowRepeat",
-            "system_prompt": """You are a recruitment consultant assistant. The user wants to reformat a CV onto the Meraki template.
-
-Note: Full CV reformatting to Word template is coming soon. For now, provide the CV content in a clean, structured format that can be easily copied into a Word template.
-
-FORMAT:
-PERSONAL DETAILS
-Name:
-Location:
-Contact:
-
-PROFILE SUMMARY
-[2-3 sentence summary]
-
-EXPERIENCE
-[Company] | [Location]
-[Title] | [Dates]
-- [Achievement]
-- [Achievement]
-
-EDUCATION
-[Qualification] - [Institution] ([Year])
-
-SKILLS
-[Comma-separated list]"""
+            "system_prompt": CV_EXTRACTION_PROMPT,
+            "output_type": "word"
         }
     }
 
@@ -561,7 +541,41 @@ async def on_turn(turn_context: TurnContext):
             )
             reply_text = response.choices[0].message.content
         except Exception as e:
-            reply_text = f"Error calling AI: {str(e)}"
+            await turn_context.send_activity(f"Error calling AI: {str(e)}")
+            return
+
+        # Handle special output types
+        if role.get("output_type") == "word":
+            # Generate Word document for CV reformat
+            try:
+                cv_data = parse_cv_json(reply_text)
+                doc_bytes = create_meraki_cv(cv_data)
+
+                # Create filename from candidate name
+                candidate_name = cv_data.get("name", "Candidate").replace(" ", "_")
+                filename = f"Meraki_CV_{candidate_name}.docx"
+
+                # Encode as base64 for Teams attachment
+                doc_base64 = base64.b64encode(doc_bytes).decode('utf-8')
+
+                # Create file attachment
+                attachment = Attachment(
+                    name=filename,
+                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    content_url=f"data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{doc_base64}"
+                )
+
+                reply = Activity(
+                    type="message",
+                    text=f"Here's the reformatted CV for **{cv_data.get('name', 'the candidate')}**:",
+                    attachments=[attachment]
+                )
+                await turn_context.send_activity(reply)
+            except ValueError as e:
+                await turn_context.send_activity(f"Error parsing CV data: {str(e)}\n\nRaw response:\n{reply_text[:500]}...")
+            except Exception as e:
+                await turn_context.send_activity(f"Error generating Word document: {str(e)}")
+            return
 
         await turn_context.send_activity(reply_text)
 
