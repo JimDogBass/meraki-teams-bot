@@ -11,12 +11,12 @@
     "termsOfUseUrl": "https://merakitalent.com/terms"
   },
   "name": {
-    "short": "CV Spec Bot",
-    "full": "CV Spec Generator Bot"
+    "short": "Jimmy Content",
+    "full": "Jimmy Content - Recruitment Content Generator"
   },
   "description": {
-    "short": "Generate anonymised CV specs",
-    "full": "Upload a CV and get an anonymised candidate spec email ready to send to clients."
+    "short": "Generate recruitment content",
+    "full": "Generate CV specs, job ads, LinkedIn outreach, candidate profiles, and more."
   },
   "icons": {
     "outline": "outline.png",
