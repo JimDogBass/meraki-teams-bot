@@ -195,29 +195,28 @@ def parse_cv_json(ai_response: str) -> dict:
         raise ValueError(f"Could not parse CV data as JSON: {e}")
 
 
-# System prompt for CV extraction - updated to preserve full detail
+# System prompt for CV extraction - optimized for speed and relevance
 CV_EXTRACTION_PROMPT = """You are a CV data extraction assistant. Extract structured information from the provided CV and return it as valid JSON.
 
 CRITICAL RULES:
 1. Return ONLY valid JSON - no explanations, no markdown code blocks, just the JSON object
-2. PRESERVE THE FULL ORIGINAL TEXT - do not summarize or condense
-3. Keep the complete profile/summary exactly as written in the CV
-4. Keep all bullet points with their full original detail - do not shorten them
-5. Use short date format: "Jan 23" not "January 2023", "2019 - 2023" is fine
-6. Extract ALL work experience entries, not just recent ones
+2. Keep the complete profile/summary exactly as written in the CV
+3. Use short date format: "Jan 23" not "January 2023"
+4. Extract ONLY the 5 most recent work experience entries - ignore older roles
+5. Keep bullet points concise but informative (2-4 bullets per role max)
 
 REQUIRED JSON STRUCTURE:
 {
   "name": "Full Name",
   "location": "City, Country",
-  "profile": "FULL profile/summary paragraph exactly as written - DO NOT TRUNCATE",
+  "profile": "FULL profile/summary paragraph exactly as written",
   "education": [
     {
       "dates": "2019 - 2023",
       "title": "Degree/Qualification name",
       "institution": "University/School name",
       "location": "City",
-      "details": ["Grade/honours if mentioned"]
+      "details": []
     }
   ],
   "work_experience": [
@@ -227,17 +226,17 @@ REQUIRED JSON STRUCTURE:
       "location": "City",
       "position": "Job Title",
       "bullets": [
-        "FULL original bullet point text - preserve all detail",
-        "Another bullet with complete original wording"
+        "Key achievement or responsibility",
+        "Another key point"
       ]
     }
   ]
 }
 
 IMPORTANT:
-- Do NOT add sections that aren't in this structure (no skills, certifications, languages sections)
-- Do NOT summarize or shorten any text - preserve the original wording
-- Include ALL bullet points from each role, not just a selection
-- Education details should only include notable achievements (grades, honours)
+- ONLY extract the 5 most recent roles - skip older career history
+- Maximum 4 bullet points per role
+- Do NOT add skills/certifications sections
+- Keep response concise to avoid timeouts
 
 Extract the CV data now:"""
