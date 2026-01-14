@@ -39,36 +39,84 @@ roles_cache = {}
 roles_cache_timestamp = 0
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
-# Conversation state - tracks pending role selections
-# Key: conversation_id, Value: {"role": role_id, "timestamp": time}
-pending_role_selections = {}
+# Conversation state - tracks pending role selections using Azure Table Storage
 PENDING_ROLE_TTL_SECONDS = 300  # 5 minutes
 
 
 def get_pending_role(conversation_id: str) -> str:
-    """Get pending role for a conversation, if any and not expired."""
-    if conversation_id in pending_role_selections:
-        entry = pending_role_selections[conversation_id]
-        if time.time() - entry["timestamp"] < PENDING_ROLE_TTL_SECONDS:
-            return entry["role"]
-        else:
-            # Expired, clean up
-            del pending_role_selections[conversation_id]
+    """Get pending role for a conversation from Azure Table Storage."""
+    if not table_service_client:
+        print("[DEBUG] No table_service_client for pending role")
+        return None
+
+    try:
+        table_client = table_service_client.get_table_client("BotState")
+        # Use hash of conversation_id as RowKey (conversation IDs can have special chars)
+        row_key = str(hash(conversation_id) & 0xFFFFFFFF)
+
+        try:
+            entity = table_client.get_entity(partition_key="pending_role", row_key=row_key)
+            timestamp = entity.get("Timestamp_", 0)
+
+            # Check if expired
+            if time.time() - timestamp < PENDING_ROLE_TTL_SECONDS:
+                print(f"[DEBUG] Found pending role: {entity.get('Role')}")
+                return entity.get("Role")
+            else:
+                # Expired, clean up
+                table_client.delete_entity(partition_key="pending_role", row_key=row_key)
+                print("[DEBUG] Pending role expired")
+        except Exception:
+            # Entity not found
+            print("[DEBUG] No pending role found in table")
+            pass
+    except Exception as e:
+        print(f"[DEBUG] Error getting pending role: {e}")
+
     return None
 
 
 def set_pending_role(conversation_id: str, role_id: str):
-    """Set a pending role selection for a conversation."""
-    pending_role_selections[conversation_id] = {
-        "role": role_id,
-        "timestamp": time.time()
-    }
+    """Set a pending role selection in Azure Table Storage."""
+    if not table_service_client:
+        print("[DEBUG] No table_service_client to set pending role")
+        return
+
+    try:
+        table_client = table_service_client.get_table_client("BotState")
+
+        # Create table if it doesn't exist
+        try:
+            table_service_client.create_table("BotState")
+        except Exception:
+            pass  # Table already exists
+
+        row_key = str(hash(conversation_id) & 0xFFFFFFFF)
+        entity = {
+            "PartitionKey": "pending_role",
+            "RowKey": row_key,
+            "ConversationId": conversation_id[:900],  # Truncate if too long
+            "Role": role_id,
+            "Timestamp_": time.time()
+        }
+        table_client.upsert_entity(entity)
+        print(f"[DEBUG] Set pending role in table: {role_id} for {row_key}")
+    except Exception as e:
+        print(f"[DEBUG] Error setting pending role: {e}")
 
 
 def clear_pending_role(conversation_id: str):
-    """Clear pending role after it's been used."""
-    if conversation_id in pending_role_selections:
-        del pending_role_selections[conversation_id]
+    """Clear pending role from Azure Table Storage."""
+    if not table_service_client:
+        return
+
+    try:
+        table_client = table_service_client.get_table_client("BotState")
+        row_key = str(hash(conversation_id) & 0xFFFFFFFF)
+        table_client.delete_entity(partition_key="pending_role", row_key=row_key)
+        print(f"[DEBUG] Cleared pending role for {row_key}")
+    except Exception as e:
+        print(f"[DEBUG] Error clearing pending role: {e}")
 
 
 def load_roles_from_table():
