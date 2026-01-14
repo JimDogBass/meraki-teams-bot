@@ -339,8 +339,13 @@ def create_help_card():
     """Create an Adaptive Card with role selection buttons."""
     roles = get_roles()
 
+    # Roles to hide from menu (not fully implemented yet)
+    hidden_roles = ["reformat"]
+
     actions = []
     for role_id, role in roles.items():
+        if role_id in hidden_roles:
+            continue
         actions.append({
             "type": "Action.Submit",
             "title": role["name"],
