@@ -339,18 +339,29 @@ def create_help_card():
     """Create an Adaptive Card with role selection buttons."""
     roles = get_roles()
 
-    # Roles to hide from menu (not fully implemented yet)
-    hidden_roles = ["reformat"]
+    # Define button order and grouping (two rows to avoid overflow)
+    row1_roles = ["spec", "profile", "ad", "jd"]
+    row2_roles = ["pitch", "outreach", "reformat"]
 
-    actions = []
-    for role_id, role in roles.items():
-        if role_id in hidden_roles:
-            continue
-        actions.append({
-            "type": "Action.Submit",
-            "title": role["name"],
-            "data": {"action": "select_role", "role": role_id}
-        })
+    row1_actions = []
+    for role_id in row1_roles:
+        if role_id in roles:
+            role = roles[role_id]
+            row1_actions.append({
+                "type": "Action.Submit",
+                "title": role["name"],
+                "data": {"action": "select_role", "role": role_id}
+            })
+
+    row2_actions = []
+    for role_id in row2_roles:
+        if role_id in roles:
+            role = roles[role_id]
+            row2_actions.append({
+                "type": "Action.Submit",
+                "title": role["name"],
+                "data": {"action": "select_role", "role": role_id}
+            })
 
     card = {
         "type": "AdaptiveCard",
@@ -369,9 +380,16 @@ def create_help_card():
                 "wrap": True,
                 "size": "Small",
                 "color": "Accent"
+            },
+            {
+                "type": "ActionSet",
+                "actions": row1_actions
+            },
+            {
+                "type": "ActionSet",
+                "actions": row2_actions
             }
-        ],
-        "actions": actions
+        ]
     }
 
     return Attachment(
