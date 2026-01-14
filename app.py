@@ -43,28 +43,34 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
 
 async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
     """Download attachment from Teams."""
-    content_url = attachment.content_url
+    download_url = None
 
-    if hasattr(attachment, 'content') and attachment.content:
-        import base64
-        return base64.b64decode(attachment.content)
+    # Teams file uploads come with content_type = application/vnd.microsoft.teams.file.download.info
+    # and content contains a dict with downloadUrl
+    if attachment.content_type == "application/vnd.microsoft.teams.file.download.info":
+        if isinstance(attachment.content, dict) and "downloadUrl" in attachment.content:
+            download_url = attachment.content["downloadUrl"]
 
-    connector_client = turn_context.adapter.create_connector_client(
-        turn_context.activity.service_url
-    )
-    token = await connector_client.credentials.get_token()
+    # Fallback to content_url if available
+    if not download_url and attachment.content_url:
+        download_url = attachment.content_url
 
-    headers = {"Authorization": f"Bearer {token}"}
+    if not download_url:
+        raise ValueError("No download URL found in attachment")
 
+    # Teams provides pre-authenticated download URLs, no auth header needed
     async with httpx.AsyncClient() as client:
-        response = await client.get(content_url, headers=headers, follow_redirects=True)
+        response = await client.get(download_url, follow_redirects=True)
         response.raise_for_status()
         return response.content
 
 
 async def extract_text_from_attachment(attachment, turn_context: TurnContext) -> str:
     """Download and extract text from an attachment."""
+    # Get filename - might be in attachment.name or in content dict for Teams
     name = attachment.name or ""
+    if not name and isinstance(attachment.content, dict):
+        name = attachment.content.get("name", "")
     content_type = attachment.content_type or ""
 
     try:
