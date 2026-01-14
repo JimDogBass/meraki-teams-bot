@@ -1,208 +1,166 @@
 """
 CV Generator - Creates Meraki-formatted Word documents from structured CV data.
+Uses the Meraki template to preserve logo, branding, and formatting.
 """
 import io
 import json
+import os
+import copy
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.style import WD_STYLE_TYPE
+from docx.shared import Pt, RGBColor
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+# Template path
+TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "templates", "Meraki_CV_Template.docx")
+
+# Brand colors from template
+HEADER_COLOR = RGBColor(0x1B, 0x46, 0x77)  # Blue headers
+BULLET_COLOR = RGBColor(0xEC, 0x00, 0x8C)  # Pink bullets
 
 
 def create_meraki_cv(cv_data: dict) -> bytes:
     """
     Generate a Meraki-formatted CV Word document from structured data.
-
-    Args:
-        cv_data: Dictionary containing extracted CV information
-
-    Returns:
-        bytes: The Word document as bytes
+    Uses the template to preserve logo and branding.
     """
-    doc = Document()
+    doc = Document(TEMPLATE_PATH)
 
-    # Set up styles
-    style = doc.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(11)
+    # Clear all paragraphs except the first (logo) and rebuild
+    # Keep track of logo paragraph
+    logo_para = doc.paragraphs[0]
 
-    # Add header styling function
-    def add_section_header(text):
-        p = doc.add_paragraph()
-        run = p.add_run(text)
-        run.bold = True
-        run.font.size = Pt(12)
-        run.font.color.rgb = RGBColor(0, 112, 192)  # Blue color like template
-        p.space_after = Pt(6)
-        return p
+    # Remove all paragraphs after the logo
+    for para in doc.paragraphs[1:]:
+        p = para._element
+        p.getparent().remove(p)
 
-    def add_field_line(label, value=""):
-        p = doc.add_paragraph()
-        label_run = p.add_run(f"{label}\t")
-        label_run.bold = True
-        if value:
-            p.add_run(value)
-        return p
-
-    def add_bullet(text):
-        p = doc.add_paragraph(style='List Bullet')
-        p.add_run(text)
-        p.paragraph_format.left_indent = Inches(0.25)
-        return p
+    # Add a blank line after logo
+    doc.add_paragraph()
 
     # === PERSONAL DETAILS ===
-    add_section_header("Personal Details")
-    add_field_line("Name", cv_data.get("name", ""))
-    add_field_line("Location", cv_data.get("location", ""))
-    add_field_line("Right to Work", "")  # Left blank for consultant
-    add_field_line("Notice", "")  # Left blank for consultant
-
-    doc.add_paragraph()  # Spacing
+    add_section_header(doc, "Personal Details")
+    add_field_line(doc, "Name", cv_data.get("name", ""))
+    add_field_line(doc, "Location", cv_data.get("location", ""))
+    add_field_line(doc, "Right to Work", "")  # Left blank
+    add_field_line(doc, "Notice", "")  # Left blank
+    doc.add_paragraph()
 
     # === CANDIDATE PROFILE ===
-    add_section_header("Candidate Profile")
+    add_section_header(doc, "Candidate Profile")
     profile = cv_data.get("profile", "")
     if profile:
-        p = doc.add_paragraph(profile)
-        p.paragraph_format.space_after = Pt(12)
+        doc.add_paragraph(profile)
+    doc.add_paragraph()
 
     # === EDUCATION ===
     education = cv_data.get("education", [])
     if education:
-        add_section_header("Education")
+        add_section_header(doc, "Education")
         for edu in education:
-            # Date and title line
-            p = doc.add_paragraph()
             dates = edu.get("dates", "")
-            title = edu.get("title", "")
             institution = edu.get("institution", "")
             location = edu.get("location", "")
+            title = edu.get("title", "")
 
-            if dates:
-                date_run = p.add_run(f"{dates}\t\t")
-                date_run.bold = False
+            # Date and institution line
+            inst_text = institution
+            if location:
+                inst_text += f", {location}"
+            add_date_entry_line(doc, dates, inst_text)
 
-            if institution:
-                p.add_run(f"{institution}")
-                if location:
-                    p.add_run(f", {location}")
-
-            # Course/degree title
+            # Course title
             if title:
-                p2 = doc.add_paragraph(title)
-                p2.paragraph_format.left_indent = Inches(0.5)
+                p = doc.add_paragraph(title)
+                p.paragraph_format.left_indent = Pt(36)
 
-            # Additional details as bullets
-            details = edu.get("details", [])
-            for detail in details:
-                add_bullet(detail)
+            # Details as bullets
+            for detail in edu.get("details", []):
+                add_bullet_point(doc, detail)
 
-        doc.add_paragraph()  # Spacing
+        doc.add_paragraph()
 
     # === WORK EXPERIENCE ===
     work_exp = cv_data.get("work_experience", [])
     if work_exp:
-        add_section_header("Work Experience")
+        add_section_header(doc, "Work Experience")
         for job in work_exp:
-            # Date and company line
-            p = doc.add_paragraph()
             dates = job.get("dates", "")
             company = job.get("company", "")
             location = job.get("location", "")
+            position = job.get("position", "")
 
-            if dates:
-                date_run = p.add_run(f"{dates}\t")
-
+            # Date and company line
             company_text = company
             if location:
                 company_text += f", {location}"
-            if company_text:
-                p.add_run(company_text)
+            add_date_entry_line(doc, dates, company_text)
 
             # Position line
-            position = job.get("position", "")
             if position:
-                p2 = doc.add_paragraph()
-                p2.add_run("Position:\t").bold = True
-                p2.add_run(position)
+                p = doc.add_paragraph()
+                run = p.add_run("Position: ")
+                run.bold = True
+                p.add_run(position)
 
             # Bullet points
-            bullets = job.get("bullets", [])
-            for bullet in bullets:
-                add_bullet(bullet)
+            for bullet in job.get("bullets", []):
+                add_bullet_point(doc, bullet)
 
-            doc.add_paragraph()  # Spacing between jobs
-
-    # === OTHER INFORMATION / SKILLS ===
-    skills = cv_data.get("skills", {})
-    other_info = cv_data.get("other_information", {})
-
-    # Combine skills sections
-    has_other = False
-
-    # Technical skills
-    tech_skills = skills.get("technical", []) or other_info.get("technical_skills", [])
-    soft_skills = skills.get("soft", []) or other_info.get("soft_skills", [])
-    certifications = other_info.get("certifications", [])
-    languages = other_info.get("languages", [])
-
-    if tech_skills or soft_skills or certifications or languages:
-        add_section_header("Other Information")
-        has_other = True
-
-        if tech_skills:
-            p = doc.add_paragraph()
-            p.add_run("Technical Skills").bold = True
-            for skill in tech_skills:
-                add_bullet(skill)
-
-        if soft_skills:
-            p = doc.add_paragraph()
-            p.add_run("Soft Skills").bold = True
-            for skill in soft_skills:
-                add_bullet(skill)
-
-        if languages:
-            p = doc.add_paragraph()
-            p.add_run("Languages").bold = True
-            for lang in languages:
-                add_bullet(lang)
-
-        if certifications:
-            p = doc.add_paragraph()
-            p.add_run("Certifications").bold = True
-            for cert in certifications:
-                add_bullet(cert)
-
-    # Skillset section (alternative format from some CVs)
-    skillset = cv_data.get("skillset", {})
-    if skillset and not has_other:
-        add_section_header("Skillset")
-        business_skills = skillset.get("business", [])
-        technical = skillset.get("technical", [])
-
-        if business_skills:
-            p = doc.add_paragraph()
-            p.add_run("Business & Leadership Skills: ").bold = True
-            p.add_run(", ".join(business_skills))
-
-        if technical:
-            p = doc.add_paragraph()
-            p.add_run("Technical Skills: ").bold = True
-            p.add_run(", ".join(technical))
-
-    doc.add_paragraph()  # Spacing
+            doc.add_paragraph()  # Space between jobs
 
     # === CONSULTANT CONTACT DETAILS ===
-    add_section_header("Consultant Contact Details")
-    add_field_line("Name", "")  # Left blank for consultant
-    add_field_line("Tel", "")  # Left blank for consultant
+    add_section_header(doc, "Consultant Contact Details")
+    add_field_line(doc, "Name", "")  # Left blank
+    add_field_line(doc, "Tel", "")  # Left blank
 
     # Save to bytes
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def add_section_header(doc, text):
+    """Add a blue bold section header."""
+    p = doc.add_paragraph()
+    run = p.add_run(text)
+    run.bold = True
+    run.font.color.rgb = HEADER_COLOR
+    run.font.size = Pt(11)
+    return p
+
+
+def add_field_line(doc, label, value):
+    """Add a field line with bold label and optional value."""
+    p = doc.add_paragraph()
+    label_run = p.add_run(f"{label}\t")
+    label_run.bold = True
+    if value:
+        p.add_run(value)
+    return p
+
+
+def add_date_entry_line(doc, dates, text):
+    """Add a date/entry line (e.g., 'Jan 23\tCompany Name')."""
+    p = doc.add_paragraph()
+    if dates:
+        date_run = p.add_run(f"{dates}\t")
+        date_run.bold = True
+    p.add_run(text)
+    return p
+
+
+def add_bullet_point(doc, text):
+    """Add a bullet point with pink bullet character."""
+    p = doc.add_paragraph()
+    # Add pink bullet
+    bullet_run = p.add_run("• ")
+    bullet_run.font.color.rgb = BULLET_COLOR
+    # Add text
+    p.add_run(text)
+    p.paragraph_format.left_indent = Pt(18)
+    return p
 
 
 def parse_cv_json(ai_response: str) -> dict:
@@ -237,57 +195,49 @@ def parse_cv_json(ai_response: str) -> dict:
         raise ValueError(f"Could not parse CV data as JSON: {e}")
 
 
-# System prompt for CV extraction
+# System prompt for CV extraction - updated to preserve full detail
 CV_EXTRACTION_PROMPT = """You are a CV data extraction assistant. Extract structured information from the provided CV and return it as valid JSON.
 
-IMPORTANT RULES:
-1. Return ONLY valid JSON - no explanations, no markdown, just the JSON object
-2. Extract actual content from the CV - do not make up information
-3. Keep bullet points concise but informative
-4. Dates should be in format like "Jan 2023 - Present" or "2019 - 2023"
-5. For profile/summary, use the candidate's own words or create a professional summary based on their experience
+CRITICAL RULES:
+1. Return ONLY valid JSON - no explanations, no markdown code blocks, just the JSON object
+2. PRESERVE THE FULL ORIGINAL TEXT - do not summarize or condense
+3. Keep the complete profile/summary exactly as written in the CV
+4. Keep all bullet points with their full original detail - do not shorten them
+5. Use short date format: "Jan 23" not "January 2023", "2019 - 2023" is fine
+6. Extract ALL work experience entries, not just recent ones
 
 REQUIRED JSON STRUCTURE:
 {
   "name": "Full Name",
   "location": "City, Country",
-  "profile": "Professional summary paragraph",
+  "profile": "FULL profile/summary paragraph exactly as written - DO NOT TRUNCATE",
   "education": [
     {
-      "dates": "Start - End",
+      "dates": "2019 - 2023",
       "title": "Degree/Qualification name",
       "institution": "University/School name",
       "location": "City",
-      "details": ["Grade/GPA if notable", "Honours/Awards"]
+      "details": ["Grade/honours if mentioned"]
     }
   ],
   "work_experience": [
     {
-      "dates": "Start - End",
+      "dates": "Jan 23 - Present",
       "company": "Company Name",
       "location": "City",
       "position": "Job Title",
       "bullets": [
-        "Key achievement or responsibility",
-        "Another achievement with metrics if available"
+        "FULL original bullet point text - preserve all detail",
+        "Another bullet with complete original wording"
       ]
     }
-  ],
-  "skills": {
-    "technical": ["Skill 1", "Skill 2"],
-    "soft": ["Skill 1", "Skill 2"]
-  },
-  "other_information": {
-    "languages": ["English - Native", "Spanish - Fluent"],
-    "certifications": ["Certification 1", "Certification 2"]
-  }
+  ]
 }
 
-NOTES:
-- List work experience in reverse chronological order (most recent first)
-- Include 3-5 bullet points per role, focusing on achievements and impact
-- If the CV has a skillset/competencies section, include those appropriately
-- Extract languages if mentioned
-- Keep the profile to 2-4 sentences maximum
+IMPORTANT:
+- Do NOT add sections that aren't in this structure (no skills, certifications, languages sections)
+- Do NOT summarize or shorten any text - preserve the original wording
+- Include ALL bullet points from each role, not just a selection
+- Education details should only include notable achievements (grades, honours)
 
-Now extract the CV data:"""
+Extract the CV data now:"""
