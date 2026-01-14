@@ -8,3 +8,4 @@ botbuilder-core
 botbuilder-schema
 aiohttp
 azure-data-tables
+azure-storage-blob

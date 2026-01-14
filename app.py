@@ -11,6 +11,8 @@ from openai import AzureOpenAI
 from PyPDF2 import PdfReader
 from docx import Document
 from azure.data.tables import TableServiceClient
+from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
+from datetime import datetime, timedelta
 from cv_generator import create_meraki_cv, parse_cv_json, CV_EXTRACTION_PROMPT
 
 app = Flask(__name__)
@@ -28,11 +30,18 @@ openai_client = AzureOpenAI(
     azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")
 )
 
-# Azure Table Storage connection
+# Azure Storage connection
 storage_connection_string = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "")
 table_service_client = None
+blob_service_client = None
 if storage_connection_string:
     table_service_client = TableServiceClient.from_connection_string(storage_connection_string)
+    blob_service_client = BlobServiceClient.from_connection_string(storage_connection_string)
+    # Ensure cv-outputs container exists
+    try:
+        blob_service_client.create_container("cv-outputs")
+    except Exception:
+        pass  # Container already exists
 
 # Role cache
 roles_cache = {}
@@ -645,24 +654,35 @@ async def on_turn(turn_context: TurnContext):
 
                 # Create filename from candidate name
                 candidate_name = cv_data.get("name", "Candidate").replace(" ", "_")
-                filename = f"Meraki_CV_{candidate_name}.docx"
+                timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                filename = f"Meraki_CV_{candidate_name}_{timestamp}.docx"
 
-                # Encode as base64 for Teams attachment
-                doc_base64 = base64.b64encode(doc_bytes).decode('utf-8')
+                # Upload to Azure Blob Storage
+                if blob_service_client:
+                    container_client = blob_service_client.get_container_client("cv-outputs")
+                    blob_client = container_client.get_blob_client(filename)
+                    blob_client.upload_blob(doc_bytes, overwrite=True)
 
-                # Create file attachment
-                attachment = Attachment(
-                    name=filename,
-                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    content_url=f"data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,{doc_base64}"
-                )
+                    # Generate SAS URL valid for 7 days
+                    account_name = blob_service_client.account_name
+                    account_key = storage_connection_string.split("AccountKey=")[1].split(";")[0]
+                    sas_token = generate_blob_sas(
+                        account_name=account_name,
+                        container_name="cv-outputs",
+                        blob_name=filename,
+                        account_key=account_key,
+                        permission=BlobSasPermissions(read=True),
+                        expiry=datetime.utcnow() + timedelta(days=7)
+                    )
+                    download_url = f"https://{account_name}.blob.core.windows.net/cv-outputs/{filename}?{sas_token}"
 
-                reply = Activity(
-                    type="message",
-                    text=f"Here's the reformatted CV for **{cv_data.get('name', 'the candidate')}**:",
-                    attachments=[attachment]
-                )
-                await turn_context.send_activity(reply)
+                    await turn_context.send_activity(
+                        f"Here's the reformatted CV for **{cv_data.get('name', 'the candidate')}**:\n\n"
+                        f"[Download {filename}]({download_url})\n\n"
+                        f"_Link expires in 7 days_"
+                    )
+                else:
+                    await turn_context.send_activity("Error: Storage not configured for file uploads")
             except ValueError as e:
                 await turn_context.send_activity(f"Error parsing CV data: {str(e)}\n\nRaw response:\n{reply_text[:500]}...")
             except Exception as e:
