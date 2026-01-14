@@ -1,0 +1,1 @@
+web: gunicorn --bind=0.0.0.0:$PORT --timeout 600 --worker-class=gevent --workers=2 app:app

@@ -195,15 +195,15 @@ def parse_cv_json(ai_response: str) -> dict:
         raise ValueError(f"Could not parse CV data as JSON: {e}")
 
 
-# System prompt for CV extraction - optimized for speed and relevance
+# System prompt for CV extraction - preserves full detail
 CV_EXTRACTION_PROMPT = """You are a CV data extraction assistant. Extract structured information from the provided CV and return it as valid JSON.
 
 CRITICAL RULES:
 1. Return ONLY valid JSON - no explanations, no markdown code blocks, just the JSON object
 2. Keep the complete profile/summary exactly as written in the CV
 3. Use short date format: "Jan 23" not "January 2023"
-4. Extract ONLY the 5 most recent work experience entries - ignore older roles
-5. Keep bullet points concise but informative (2-4 bullets per role max)
+4. Extract ALL work experience entries
+5. Preserve ALL bullet points from each role
 
 REQUIRED JSON STRUCTURE:
 {
@@ -226,17 +226,17 @@ REQUIRED JSON STRUCTURE:
       "location": "City",
       "position": "Job Title",
       "bullets": [
-        "Key achievement or responsibility",
-        "Another key point"
+        "Full original bullet point text",
+        "Another bullet with complete wording"
       ]
     }
   ]
 }
 
 IMPORTANT:
-- ONLY extract the 5 most recent roles - skip older career history
-- Maximum 4 bullet points per role
+- Extract ALL roles from the CV
+- Include ALL bullet points from each role
 - Do NOT add skills/certifications sections
-- Keep response concise to avoid timeouts
+- Preserve original wording
 
 Extract the CV data now:"""

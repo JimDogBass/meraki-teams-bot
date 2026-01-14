@@ -633,18 +633,14 @@ async def on_turn(turn_context: TurnContext):
 
         # Call OpenAI with the role's system prompt
         try:
-            # Limit input size to prevent memory/timeout issues (max ~20k chars)
-            if len(final_content) > 20000:
-                final_content = final_content[:20000] + "\n\n[Content truncated - showing first portion only]"
-
             response = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": role["system_prompt"]},
                     {"role": "user", "content": final_content}
                 ],
-                max_tokens=2000,  # Reduced to speed up response
-                timeout=45  # 45 second timeout
+                max_tokens=8000,  # Allow large responses for full CVs
+                timeout=120  # 2 minute timeout for large CVs
             )
             reply_text = response.choices[0].message.content
         except Exception as e:

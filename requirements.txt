@@ -9,3 +9,4 @@ botbuilder-schema
 aiohttp
 azure-data-tables
 azure-storage-blob
+gevent
