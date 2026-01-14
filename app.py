@@ -1,9 +1,13 @@
 import os
 import asyncio
+import io
+import httpx
 from flask import Flask, request, Response
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity
 from openai import AzureOpenAI
+from PyPDF2 import PdfReader
+from docx import Document
 
 app = Flask(__name__)
 
@@ -19,6 +23,64 @@ openai_client = AzureOpenAI(
     api_version="2024-02-01",
     azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT")
 )
+
+
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    """Extract text from PDF file bytes."""
+    reader = PdfReader(io.BytesIO(file_bytes))
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text() or ""
+    return text.strip()
+
+
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    """Extract text from Word document bytes."""
+    doc = Document(io.BytesIO(file_bytes))
+    text = "\n".join([para.text for para in doc.paragraphs])
+    return text.strip()
+
+
+async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
+    """Download attachment from Teams."""
+    content_url = attachment.content_url
+
+    if hasattr(attachment, 'content') and attachment.content:
+        import base64
+        return base64.b64decode(attachment.content)
+
+    connector_client = turn_context.adapter.create_connector_client(
+        turn_context.activity.service_url
+    )
+    token = await connector_client.credentials.get_token()
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(content_url, headers=headers, follow_redirects=True)
+        response.raise_for_status()
+        return response.content
+
+
+async def extract_text_from_attachment(attachment, turn_context: TurnContext) -> str:
+    """Download and extract text from an attachment."""
+    name = attachment.name or ""
+    content_type = attachment.content_type or ""
+
+    try:
+        file_bytes = await download_attachment(attachment, turn_context)
+
+        if name.lower().endswith('.pdf') or 'pdf' in content_type.lower():
+            return extract_text_from_pdf(file_bytes)
+        elif name.lower().endswith('.docx') or 'wordprocessingml' in content_type.lower():
+            return extract_text_from_docx(file_bytes)
+        elif name.lower().endswith('.doc'):
+            return "[Error: Old .doc format not supported. Please save as .docx]"
+        else:
+            return f"[Unsupported file type: {name}]"
+    except Exception as e:
+        return f"[Error extracting text from {name}: {str(e)}]"
+
 
 SYSTEM_PROMPT = """You are a recruitment consultant assistant. When given CV information or candidate details, create an anonymised candidate spec email.
 
@@ -62,23 +124,48 @@ For general questions not about CVs, respond helpfully as a recruitment assistan
 
 async def on_turn(turn_context: TurnContext):
     if turn_context.activity.type == "message":
-        user_text = turn_context.activity.text
-        
-        if user_text:
+        user_text = turn_context.activity.text or ""
+        attachments = turn_context.activity.attachments or []
+
+        # Extract text from any file attachments
+        attachment_texts = []
+        for attachment in attachments:
+            # Skip inline images and other non-document attachments
+            if attachment.content_type and attachment.content_type.startswith('image/'):
+                continue
+            extracted = await extract_text_from_attachment(attachment, turn_context)
+            if extracted and not extracted.startswith('['):
+                attachment_texts.append(f"--- Content from {attachment.name} ---\n{extracted}")
+            elif extracted.startswith('['):
+                attachment_texts.append(extracted)
+
+        # Combine user text with any extracted file content
+        combined_input = user_text
+        if attachment_texts:
+            file_content = "\n\n".join(attachment_texts)
+            if user_text:
+                combined_input = f"{user_text}\n\n{file_content}"
+            else:
+                combined_input = file_content
+
+        if combined_input and not combined_input.startswith('['):
             try:
                 response = openai_client.chat.completions.create(
                     model="gpt-4o-mini",
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": user_text}
+                        {"role": "user", "content": combined_input}
                     ]
                 )
                 reply_text = response.choices[0].message.content
             except Exception as e:
                 reply_text = f"Error calling AI: {str(e)}"
+        elif combined_input.startswith('['):
+            # Error message from file extraction
+            reply_text = combined_input
         else:
-            reply_text = "Send me CV details and I'll create an anonymised spec email for you."
-        
+            reply_text = "Send me a CV (paste text, or upload PDF/Word file) and I'll create an anonymised spec email for you."
+
         await turn_context.send_activity(reply_text)
 
 @app.route("/")
