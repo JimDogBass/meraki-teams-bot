@@ -39,6 +39,37 @@ roles_cache = {}
 roles_cache_timestamp = 0
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
+# Conversation state - tracks pending role selections
+# Key: conversation_id, Value: {"role": role_id, "timestamp": time}
+pending_role_selections = {}
+PENDING_ROLE_TTL_SECONDS = 300  # 5 minutes
+
+
+def get_pending_role(conversation_id: str) -> str:
+    """Get pending role for a conversation, if any and not expired."""
+    if conversation_id in pending_role_selections:
+        entry = pending_role_selections[conversation_id]
+        if time.time() - entry["timestamp"] < PENDING_ROLE_TTL_SECONDS:
+            return entry["role"]
+        else:
+            # Expired, clean up
+            del pending_role_selections[conversation_id]
+    return None
+
+
+def set_pending_role(conversation_id: str, role_id: str):
+    """Set a pending role selection for a conversation."""
+    pending_role_selections[conversation_id] = {
+        "role": role_id,
+        "timestamp": time.time()
+    }
+
+
+def clear_pending_role(conversation_id: str):
+    """Clear pending role after it's been used."""
+    if conversation_id in pending_role_selections:
+        del pending_role_selections[conversation_id]
+
 
 def load_roles_from_table():
     """Load roles from Azure Table Storage."""
@@ -454,6 +485,9 @@ async def on_turn(turn_context: TurnContext):
         user_text = turn_context.activity.text or ""
         attachments = turn_context.activity.attachments or []
 
+        # Get conversation ID for state management
+        conversation_id = turn_context.activity.conversation.id
+
         # Check for Adaptive Card button data
         card_data = None
         if turn_context.activity.value:
@@ -489,16 +523,23 @@ async def on_turn(turn_context: TurnContext):
         # Resolve which role to use
         role_id, content_for_role = resolve_role(user_text, card_data)
 
-        # If card button was pressed with no content, ask for input
+        # If card button was pressed with no content, ask for input and save pending role
         if role_id and card_data and not combined_input.strip():
             roles = get_roles()
             role = roles[role_id]
+            set_pending_role(conversation_id, role_id)  # Remember the selection
             await turn_context.send_activity(f"Great! Send me the content for **{role['name']}** - you can paste text or upload a PDF/Word file.")
             return
 
-        # If no role identified, show help
+        # If no role identified, check for pending role from previous button click
         if not role_id:
-            if combined_input and not combined_input.startswith('['):
+            pending = get_pending_role(conversation_id)
+            if pending and combined_input and not combined_input.startswith('['):
+                # Use the pending role from button click
+                role_id = pending
+                content_for_role = combined_input
+                clear_pending_role(conversation_id)
+            elif combined_input and not combined_input.startswith('['):
                 # There's content but no clear role - show options
                 help_card = create_help_card()
                 reply = Activity(
@@ -507,11 +548,12 @@ async def on_turn(turn_context: TurnContext):
                     attachments=[help_card]
                 )
                 await turn_context.send_activity(reply)
+                return
             else:
                 help_card = create_help_card()
                 reply = Activity(type="message", attachments=[help_card])
                 await turn_context.send_activity(reply)
-            return
+                return
 
         # Get the role configuration
         roles = get_roles()
