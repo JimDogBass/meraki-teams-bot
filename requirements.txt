@@ -7,3 +7,4 @@ httpx
 botbuilder-core
 botbuilder-schema
 aiohttp
+azure-data-tables
