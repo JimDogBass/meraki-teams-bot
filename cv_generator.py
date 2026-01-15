@@ -88,10 +88,14 @@ def create_meraki_cv(cv_data: dict) -> bytes:
 
     # === ADD LOGO IN BODY (centered, page 1 only, full color) ===
     if os.path.exists(LOGO_PATH):
+        # Add some space before logo
+        add_blank_line(doc)
         logo_para = doc.add_paragraph()
         logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         logo_run = logo_para.add_run()
-        logo_run.add_picture(LOGO_PATH, width=Inches(2.5))
+        logo_run.add_picture(LOGO_PATH, width=Inches(3.5))  # Bigger logo
+        # Add space after logo
+        add_blank_line(doc)
 
     # === PERSONAL DETAILS ===
     add_section_header(doc, "PERSONAL DETAILS")
@@ -167,10 +171,9 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             if position:
                 add_position_line(doc, position)
 
-            # Bullet points as plain text
+            # Bullet points with actual bullets
             for bullet in job.get("bullets", []):
-                p = doc.add_paragraph(bullet)
-                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                add_bullet_point(doc, bullet)
 
             # Add blank line between jobs (except last)
             if i < len(work_exp) - 1:
@@ -271,17 +274,30 @@ def add_indented_line(doc, text):
 
 
 def add_position_line(doc, position):
-    """Add a position line with bold label."""
+    """Add a position line with bold label and bold position value."""
     p = doc.add_paragraph()
     # Set up tab stops
     tab_stops = p.paragraph_format.tab_stops
     tab_stops.add_tab_stop(TAB_RIGHT_POS, WD_TAB_ALIGNMENT.RIGHT)
     tab_stops.add_tab_stop(TAB_LEFT_POS, WD_TAB_ALIGNMENT.LEFT)
-    # Add tabbed position
+    # Set hanging indent so wrapped lines align with position value
+    p.paragraph_format.left_indent = TAB_LEFT_POS
+    p.paragraph_format.first_line_indent = -TAB_LEFT_POS
+    # Add tabbed position (both label and value bold)
     p.add_run("\t")
-    run = p.add_run("Position:")
-    run.bold = True
-    p.add_run(f"\t{position}")
+    label_run = p.add_run("Position:")
+    label_run.bold = True
+    p.add_run("\t")
+    value_run = p.add_run(position)
+    value_run.bold = True
+    return p
+
+
+def add_bullet_point(doc, text):
+    """Add a bullet point line with bullet character."""
+    p = doc.add_paragraph()
+    p.add_run("• " + text)
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     return p
 
 
