@@ -296,9 +296,12 @@ def add_position_line(doc, position):
 
 
 def add_bullet_point(doc, text):
-    """Add a bullet point line with bullet character."""
+    """Add a bullet point line with proper hanging indent."""
     p = doc.add_paragraph()
-    p.add_run("• " + text)
+    # Set hanging indent so wrapped text aligns with first line (not bullet)
+    p.paragraph_format.left_indent = Cm(0.6)
+    p.paragraph_format.first_line_indent = Cm(-0.6)
+    p.add_run("•\t" + text)
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     return p
 
