@@ -76,10 +76,10 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     style.paragraph_format.space_after = Pt(0)
     style.paragraph_format.space_before = Pt(0)
 
-    # Set page margins (matching Emeliene CV)
+    # Set page margins (reduced top margin for logo)
     for section in doc.sections:
-        section.top_margin = Inches(1.48)
-        section.bottom_margin = Inches(1.28)
+        section.top_margin = Inches(0.5)
+        section.bottom_margin = Inches(0.5)
         section.left_margin = Inches(1.0)
         section.right_margin = Inches(1.0)
 
@@ -182,7 +182,7 @@ def create_meraki_cv(cv_data: dict) -> bytes:
         add_blank_line(doc)
         add_section_header(doc, "OTHER INFORMATION")
         add_blank_line(doc)
-        for item in other_info:
+        for i, item in enumerate(other_info):
             category = item.get("category", "")
             content = item.get("content", [])
 
@@ -200,6 +200,10 @@ def create_meraki_cv(cv_data: dict) -> bytes:
                 p.add_run('\n'.join(content))
             elif content:
                 p = doc.add_paragraph(str(content))
+
+            # Add space between categories (except last)
+            if i < len(other_info) - 1:
+                add_blank_line(doc)
 
     # Save to bytes
     buffer = io.BytesIO()
@@ -268,6 +272,9 @@ def add_indented_line(doc, text):
     tab_stops = p.paragraph_format.tab_stops
     tab_stops.add_tab_stop(TAB_RIGHT_POS, WD_TAB_ALIGNMENT.RIGHT)
     tab_stops.add_tab_stop(TAB_LEFT_POS, WD_TAB_ALIGNMENT.LEFT)
+    # Set hanging indent so wrapped text aligns with content column
+    p.paragraph_format.left_indent = TAB_LEFT_POS
+    p.paragraph_format.first_line_indent = -TAB_LEFT_POS
     # Add double-tabbed content (first tab to RIGHT pos, second to LEFT pos)
     p.add_run(f"\t\t{text}")
     return p
