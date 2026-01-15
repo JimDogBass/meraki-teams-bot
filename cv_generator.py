@@ -88,10 +88,12 @@ def create_meraki_cv(cv_data: dict) -> bytes:
 
     # === ADD LOGO IN BODY (centered, page 1 only, full color) ===
     if os.path.exists(LOGO_PATH):
+        add_blank_line(doc)  # Space before logo
         logo_para = doc.add_paragraph()
         logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         logo_run = logo_para.add_run()
         logo_run.add_picture(LOGO_PATH, width=Inches(3.5))
+        add_blank_line(doc)  # Space after logo
 
     # === PERSONAL DETAILS ===
     add_section_header(doc, "PERSONAL DETAILS")
