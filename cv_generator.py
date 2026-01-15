@@ -1,6 +1,6 @@
 """
 CV Generator - Creates Meraki-formatted Word documents from structured CV data.
-Builds document from scratch with logo in body (not header) to avoid greyed-out appearance.
+Logo in header (centered) so it appears on every page.
 """
 import io
 import json
@@ -18,6 +18,9 @@ LOGO_PATH = os.path.join(os.path.dirname(__file__), "templates", "meraki_logo.pn
 # Tab positions for two-column layout (matching Emeliene CV)
 TAB_RIGHT_POS = Cm(3.5)  # Right-aligned tab for labels
 TAB_LEFT_POS = Cm(4.5)   # Left-aligned tab for values
+
+# Grey shading for section headers
+HEADER_SHADING = "D9D9D9"
 
 
 def add_page_border(doc):
@@ -63,11 +66,14 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     # Add page border
     add_page_border(doc)
 
-    # === ADD LOGO (in body, not header) ===
+    # === ADD LOGO IN HEADER (centered, appears on every page) ===
     if os.path.exists(LOGO_PATH):
-        logo_para = doc.add_paragraph()
-        logo_run = logo_para.add_run()
-        logo_run.add_picture(LOGO_PATH, width=Inches(2.5))
+        for section in doc.sections:
+            header = section.header
+            header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+            header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            header_run = header_para.add_run()
+            header_run.add_picture(LOGO_PATH, width=Inches(2.5))
 
     # === PERSONAL DETAILS ===
     add_section_header(doc, "PERSONAL DETAILS")
@@ -136,8 +142,8 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             company = job.get("company", "")
             position = job.get("position", "")
 
-            # Date and company line
-            add_tabbed_line(doc, dates, company)
+            # Date and company line (bold)
+            add_tabbed_line(doc, dates, company, bold=True)
 
             # Position line
             if position:
@@ -190,12 +196,21 @@ def add_blank_line(doc):
 
 
 def add_section_header(doc, text):
-    """Add a bold section header (uppercase, no color)."""
+    """Add a bold section header with grey shading."""
     p = doc.add_paragraph()
     run = p.add_run(text)
     run.bold = True
     run.font.name = 'Aptos'
     run.font.size = Pt(11)
+
+    # Add grey shading to paragraph
+    pPr = p._element.get_or_add_pPr()
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:val'), 'clear')
+    shd.set(qn('w:color'), 'auto')
+    shd.set(qn('w:fill'), HEADER_SHADING)
+    pPr.append(shd)
+
     return p
 
 
@@ -211,15 +226,17 @@ def add_field_line(doc, label, value):
     return p
 
 
-def add_tabbed_line(doc, left_text, right_text):
+def add_tabbed_line(doc, left_text, right_text, bold=False):
     """Add a line with tab-separated content (e.g., '\t2019\tMA Event Design')."""
     p = doc.add_paragraph()
     # Set up tab stops
     tab_stops = p.paragraph_format.tab_stops
     tab_stops.add_tab_stop(TAB_RIGHT_POS, WD_TAB_ALIGNMENT.RIGHT)
     tab_stops.add_tab_stop(TAB_LEFT_POS, WD_TAB_ALIGNMENT.LEFT)
-    # Add tabbed content
-    p.add_run(f"\t{left_text}\t{right_text}")
+    # Add tabbed content with optional bold
+    run = p.add_run(f"\t{left_text}\t{right_text}")
+    if bold:
+        run.bold = True
     return p
 
 
