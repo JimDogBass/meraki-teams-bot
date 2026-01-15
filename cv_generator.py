@@ -20,6 +20,24 @@ TAB_RIGHT_POS = Cm(3.5)  # Right-aligned tab for labels
 TAB_LEFT_POS = Cm(4.5)   # Left-aligned tab for values
 
 
+def add_page_border(doc):
+    """Add a single-line border around the page."""
+    for section in doc.sections:
+        sectPr = section._sectPr
+        pgBorders = OxmlElement('w:pgBorders')
+        pgBorders.set(qn('w:offsetFrom'), 'page')
+
+        for border_name in ['top', 'left', 'bottom', 'right']:
+            border = OxmlElement(f'w:{border_name}')
+            border.set(qn('w:val'), 'single')
+            border.set(qn('w:sz'), '4')
+            border.set(qn('w:space'), '24')
+            border.set(qn('w:color'), 'auto')
+            pgBorders.append(border)
+
+        sectPr.append(pgBorders)
+
+
 def create_meraki_cv(cv_data: dict) -> bytes:
     """
     Generate a Meraki-formatted CV Word document from structured data.
@@ -28,36 +46,52 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     # Create new blank document
     doc = Document()
 
-    # Set default font to Aptos 11pt
+    # Set default font to Aptos 11pt with no spacing after paragraphs
     style = doc.styles['Normal']
     style.font.name = 'Aptos'
     style.font.size = Pt(11)
+    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.space_before = Pt(0)
+
+    # Set page margins (matching Emeliene CV)
+    for section in doc.sections:
+        section.top_margin = Inches(1.48)
+        section.bottom_margin = Inches(1.28)
+        section.left_margin = Inches(1.0)
+        section.right_margin = Inches(1.0)
+
+    # Add page border
+    add_page_border(doc)
 
     # === ADD LOGO (in body, not header) ===
     if os.path.exists(LOGO_PATH):
         logo_para = doc.add_paragraph()
         logo_run = logo_para.add_run()
         logo_run.add_picture(LOGO_PATH, width=Inches(2.5))
-        doc.add_paragraph()  # Blank line after logo
 
     # === PERSONAL DETAILS ===
     add_section_header(doc, "PERSONAL DETAILS")
-    doc.add_paragraph()
+    add_blank_line(doc)
     add_field_line(doc, "Name", cv_data.get("name", ""))
     add_field_line(doc, "Location", cv_data.get("location", ""))
-    add_field_line(doc, "Right to Work", cv_data.get("right_to_work", ""))
-    add_field_line(doc, "Notice", cv_data.get("notice", ""))
+    # Only show these fields if they have values
+    right_to_work = cv_data.get("right_to_work", "")
+    if right_to_work:
+        add_field_line(doc, "Right to Work", right_to_work)
+    notice = cv_data.get("notice", "")
+    if notice:
+        add_field_line(doc, "Notice", notice)
     salary = cv_data.get("salary_expectations", "")
     if salary:
         add_field_line(doc, "Salary expectations", salary)
-    doc.add_paragraph()
 
     # === EDUCATION ===
     education = cv_data.get("education", [])
     if education:
+        add_blank_line(doc)
         add_section_header(doc, "EDUCATION")
-        doc.add_paragraph()
-        for edu in education:
+        add_blank_line(doc)
+        for i, edu in enumerate(education):
             dates = edu.get("dates", "")
             institution = edu.get("institution", "")
             title = edu.get("title", "")
@@ -74,11 +108,14 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             for detail in details:
                 add_indented_line(doc, detail)
 
-        doc.add_paragraph()
+            # Add blank line between education entries (except last)
+            if i < len(education) - 1:
+                add_blank_line(doc)
 
     # === CANDIDATE PROFILE ===
+    add_blank_line(doc)
     add_section_header(doc, "CANDIDATE PROFILE")
-    doc.add_paragraph()
+    add_blank_line(doc)
     profile = cv_data.get("profile", "")
     if profile:
         # Split profile into paragraphs if it contains double newlines
@@ -86,14 +123,15 @@ def create_meraki_cv(cv_data: dict) -> bytes:
         for para_text in paragraphs:
             p = doc.add_paragraph(para_text.strip())
             p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    doc.add_paragraph()
 
     # === WORK EXPERIENCE ===
     work_exp = cv_data.get("work_experience", [])
     if work_exp:
+        add_blank_line(doc)
+        add_blank_line(doc)
         add_section_header(doc, "WORK EXPERIENCE")
-        doc.add_paragraph()
-        for job in work_exp:
+        add_blank_line(doc)
+        for i, job in enumerate(work_exp):
             dates = job.get("dates", "")
             company = job.get("company", "")
             position = job.get("position", "")
@@ -105,18 +143,21 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             if position:
                 add_position_line(doc, position)
 
-            # Bullet points as plain text (no bullets in this format)
+            # Bullet points as plain text
             for bullet in job.get("bullets", []):
                 p = doc.add_paragraph(bullet)
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-            doc.add_paragraph()  # Space between jobs
+            # Add blank line between jobs (except last)
+            if i < len(work_exp) - 1:
+                add_blank_line(doc)
 
-    # === OTHER INFORMATION (only if present) ===
+    # === OTHER INFORMATION (only if present and has content) ===
     other_info = cv_data.get("other_information", [])
-    if other_info:
+    if other_info and len(other_info) > 0:
+        add_blank_line(doc)
         add_section_header(doc, "OTHER INFORMATION")
-        doc.add_paragraph()
+        add_blank_line(doc)
         for item in other_info:
             category = item.get("category", "")
             content = item.get("content", [])
@@ -130,18 +171,22 @@ def create_meraki_cv(cv_data: dict) -> bytes:
                 run.font.size = Pt(11)
 
             # Add content items
-            if isinstance(content, list):
+            if isinstance(content, list) and len(content) > 0:
                 p = doc.add_paragraph()
                 p.add_run('\n'.join(content))
-            else:
+            elif content:
                 p = doc.add_paragraph(str(content))
-        doc.add_paragraph()
 
     # Save to bytes
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def add_blank_line(doc):
+    """Add an empty paragraph for spacing."""
+    return doc.add_paragraph()
 
 
 def add_section_header(doc, text):
