@@ -100,16 +100,9 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     add_blank_line(doc)
     add_field_line(doc, "Name", cv_data.get("name", ""))
     add_field_line(doc, "Location", cv_data.get("location", ""))
-    # Only show these fields if they have values
-    right_to_work = cv_data.get("right_to_work", "")
-    if right_to_work:
-        add_field_line(doc, "Right to Work", right_to_work)
-    notice = cv_data.get("notice", "")
-    if notice:
-        add_field_line(doc, "Notice", notice)
-    salary = cv_data.get("salary_expectations", "")
-    if salary:
-        add_field_line(doc, "Salary expectations", salary)
+    add_field_line(doc, "Right to Work", cv_data.get("right_to_work", ""))
+    add_field_line(doc, "Notice", cv_data.get("notice", ""))
+    add_field_line(doc, "Salary expectations", cv_data.get("salary_expectations", ""))
 
     # === EDUCATION ===
     education = cv_data.get("education", [])
