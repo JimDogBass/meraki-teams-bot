@@ -88,14 +88,10 @@ def create_meraki_cv(cv_data: dict) -> bytes:
 
     # === ADD LOGO IN BODY (centered, page 1 only, full color) ===
     if os.path.exists(LOGO_PATH):
-        # Add some space before logo
-        add_blank_line(doc)
         logo_para = doc.add_paragraph()
         logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         logo_run = logo_para.add_run()
-        logo_run.add_picture(LOGO_PATH, width=Inches(3.5))  # Bigger logo
-        # Add space after logo
-        add_blank_line(doc)
+        logo_run.add_picture(LOGO_PATH, width=Inches(3.5))
 
     # === PERSONAL DETAILS ===
     add_section_header(doc, "PERSONAL DETAILS")
@@ -170,6 +166,7 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             # Position line
             if position:
                 add_position_line(doc, position)
+                add_blank_line(doc)  # Space after position
 
             # Bullet points with actual bullets
             for bullet in job.get("bullets", []):
@@ -254,6 +251,9 @@ def add_tabbed_line(doc, left_text, right_text, bold=False):
     tab_stops = p.paragraph_format.tab_stops
     tab_stops.add_tab_stop(TAB_RIGHT_POS, WD_TAB_ALIGNMENT.RIGHT)
     tab_stops.add_tab_stop(TAB_LEFT_POS, WD_TAB_ALIGNMENT.LEFT)
+    # Set hanging indent so wrapped text aligns with right column
+    p.paragraph_format.left_indent = TAB_LEFT_POS
+    p.paragraph_format.first_line_indent = -TAB_LEFT_POS
     # Add tabbed content with optional bold
     run = p.add_run(f"\t{left_text}\t{right_text}")
     if bold:
