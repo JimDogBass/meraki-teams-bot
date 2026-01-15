@@ -41,6 +41,86 @@ def add_page_border(doc):
         sectPr.append(pgBorders)
 
 
+def add_floating_header_logo(doc, logo_path):
+    """
+    Add logo as a floating image in header.
+    Positioned at top center, appears on every page in full color.
+    """
+    from docx.oxml import parse_xml
+
+    # Target dimensions
+    target_width = Inches(2.5)
+    # Assume typical logo aspect ratio ~3:1 (width:height)
+    target_height = Inches(0.8)
+
+    # Center position: offset from left margin
+    # Page is 8.5" with 1" margins = 6.5" content width
+    # Center a 2.5" logo: (6.5 - 2.5) / 2 = 2"
+    horiz_offset = Inches(2.0)
+    vert_offset = Inches(0)
+
+    for section in doc.sections:
+        header = section.header
+        header.is_linked_to_previous = False
+
+        # Get or create paragraph in header
+        if not header.paragraphs:
+            header.add_paragraph()
+        para = header.paragraphs[0]
+
+        # Add the picture inline first
+        run = para.add_run()
+        picture = run.add_picture(logo_path, width=target_width)
+
+        # Get the drawing element
+        drawing = run._element.find(qn('w:drawing'))
+        inline = drawing.find('{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}inline')
+
+        if inline is not None:
+            # Extract graphic and docPr from inline
+            graphic = inline.find('{http://schemas.openxmlformats.org/drawingml/2006/main}graphic')
+            docPr = inline.find('{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr')
+            extent = inline.find('{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}extent')
+
+            doc_id = docPr.get('id') if docPr is not None else '1'
+            doc_name = docPr.get('name') if docPr is not None else 'Picture'
+            cx = extent.get('cx') if extent is not None else str(int(target_width))
+            cy = extent.get('cy') if extent is not None else str(int(target_height))
+
+            # Build anchor XML for floating image
+            anchor_xml = f'''<wp:anchor xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+                       distT="0" distB="0" distL="114300" distR="114300"
+                       simplePos="0" relativeHeight="251659264" behindDoc="0"
+                       locked="0" layoutInCell="1" allowOverlap="1">
+                <wp:simplePos x="0" y="0"/>
+                <wp:positionH relativeFrom="margin">
+                    <wp:posOffset>{int(horiz_offset)}</wp:posOffset>
+                </wp:positionH>
+                <wp:positionV relativeFrom="paragraph">
+                    <wp:posOffset>{int(vert_offset)}</wp:posOffset>
+                </wp:positionV>
+                <wp:extent cx="{cx}" cy="{cy}"/>
+                <wp:effectExtent l="0" t="0" r="0" b="0"/>
+                <wp:wrapNone/>
+                <wp:docPr id="{doc_id}" name="{doc_name}"/>
+                <wp:cNvGraphicFramePr>
+                    <a:graphicFrameLocks noChangeAspect="1"/>
+                </wp:cNvGraphicFramePr>
+            </wp:anchor>'''
+
+            anchor = parse_xml(anchor_xml)
+
+            # Move graphic from inline to anchor
+            if graphic is not None:
+                inline.remove(graphic)
+                anchor.append(graphic)
+
+            # Replace inline with anchor
+            drawing.remove(inline)
+            drawing.append(anchor)
+
+
 def create_meraki_cv(cv_data: dict) -> bytes:
     """
     Generate a Meraki-formatted CV Word document from structured data.
@@ -66,12 +146,9 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     # Add page border
     add_page_border(doc)
 
-    # === ADD LOGO IN BODY (centered, full color) ===
+    # === ADD LOGO AS FLOATING IMAGE IN HEADER (full color, every page) ===
     if os.path.exists(LOGO_PATH):
-        logo_para = doc.add_paragraph()
-        logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        logo_run = logo_para.add_run()
-        logo_run.add_picture(LOGO_PATH, width=Inches(2.5))
+        add_floating_header_logo(doc, LOGO_PATH)
 
     # === PERSONAL DETAILS ===
     add_section_header(doc, "PERSONAL DETAILS")
