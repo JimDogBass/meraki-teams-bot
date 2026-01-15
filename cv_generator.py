@@ -66,14 +66,12 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     # Add page border
     add_page_border(doc)
 
-    # === ADD LOGO IN HEADER (centered, appears on every page) ===
+    # === ADD LOGO IN BODY (centered, full color) ===
     if os.path.exists(LOGO_PATH):
-        for section in doc.sections:
-            header = section.header
-            header_para = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-            header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            header_run = header_para.add_run()
-            header_run.add_picture(LOGO_PATH, width=Inches(2.5))
+        logo_para = doc.add_paragraph()
+        logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        logo_run = logo_para.add_run()
+        logo_run.add_picture(LOGO_PATH, width=Inches(2.5))
 
     # === PERSONAL DETAILS ===
     add_section_header(doc, "PERSONAL DETAILS")
@@ -103,8 +101,8 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             title = edu.get("title", "")
             details = edu.get("details", [])
 
-            # Date and qualification line
-            add_tabbed_line(doc, dates, title)
+            # Date and qualification line (bold)
+            add_tabbed_line(doc, dates, title, bold=True)
 
             # Institution on next line (indented)
             if institution:
