@@ -9,6 +9,7 @@ from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, Tu
 from botbuilder.schema import Activity, Attachment
 from openai import AzureOpenAI
 from PyPDF2 import PdfReader
+import pdfplumber
 from docx import Document
 from azure.data.tables import TableServiceClient
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
@@ -396,12 +397,27 @@ def get_roles():
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
-    """Extract text from PDF file bytes."""
-    reader = PdfReader(io.BytesIO(file_bytes))
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() or ""
-    return text.strip()
+    """Extract text from PDF file bytes, including tables."""
+    text_parts = []
+
+    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        for page in pdf.pages:
+            # Extract regular text
+            page_text = page.extract_text()
+            if page_text:
+                text_parts.append(page_text)
+
+            # Extract tables (pdfplumber handles these better)
+            tables = page.extract_tables()
+            for table in tables:
+                for row in table:
+                    # Filter out None values and join cells
+                    row_text = [cell.strip() if cell else "" for cell in row]
+                    row_text = [cell for cell in row_text if cell]
+                    if row_text:
+                        text_parts.append(" | ".join(row_text))
+
+    return "\n".join(text_parts).strip()
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
