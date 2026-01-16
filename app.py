@@ -189,12 +189,12 @@ RULES:
 - Do not include candidate name, contact details, or any identifying information
 - Do not include gender
 - Do not include pronouns that reveal gender - use "they/their"
-- Use **bold** markdown formatting for company descriptions and role titles
-- Add blank lines between sections for readability
+- Use **bold** markdown formatting ONLY for company descriptions and role titles in the career section - NOT in the intro sentences
+- Add blank lines between sections (after intro paragraph, between each role block, before Education) but keep bullets grouped together with no blank lines between them
 
 FUNCTION: Identify the candidate's actual function/specialism from their CV (e.g., Fundraising & IR, Private Equity, Credit Risk, Actuarial, Asset Management). Do NOT just use their job title - use their specialism.
 
-FORMAT (follow exactly, note the blank lines and bold formatting):
+FORMAT (follow exactly - blank lines between sections, but bullets stay grouped):
 
 Subject: Candidate Spec - [Seniority] [Function/Specialism] - [Location]
 
@@ -206,7 +206,6 @@ I have highlighted some of their career below; let me know if you would be inter
 
 **[Descriptive Company Type] | [Location]**
 **[Role Title] ([Dates])**
-
 - [Achievement/responsibility]
 - [Achievement/responsibility]
 - [Achievement/responsibility]
@@ -214,7 +213,6 @@ I have highlighted some of their career below; let me know if you would be inter
 
 **[Descriptive Company Type] | [Location]**
 **[Role Title] ([Dates])**
-
 - [Achievement/responsibility]
 - [Achievement/responsibility]
 - [Achievement/responsibility]
