@@ -296,16 +296,17 @@ def add_position_line(doc, position):
 
 
 def add_bullet_point(doc, text, level=0):
-    """Add a bullet point line with proper hanging indent. Supports multiple levels."""
+    """Add a bullet point line with proper hanging indent. Supports 4 levels."""
     p = doc.add_paragraph()
 
-    # Different bullets for different levels
-    bullets = ["•", "○", "-"]
+    # Different bullets for 4 levels (matching typical CV hierarchy)
+    # Level 0: filled bullet, Level 1: open circle, Level 2: en dash, Level 3: arrow
+    bullets = ["•", "○", "–", "›"]
     bullet_char = bullets[min(level, len(bullets) - 1)]
 
     # Indentation increases with level
     base_indent = Cm(0.6)
-    level_indent = Cm(0.6 * level)
+    level_indent = Cm(0.5 * level)
 
     p.paragraph_format.left_indent = base_indent + level_indent
     p.paragraph_format.first_line_indent = Cm(-0.4)
@@ -403,13 +404,18 @@ REQUIRED JSON STRUCTURE:
       "bullets": [
         "Simple bullet point as a string",
         {
-          "text": "Main bullet point with sub-items",
+          "text": "Category or main point with sub-items",
           "sub_bullets": [
-            "Sub-item 1",
-            "Sub-item 2",
+            "Second level item",
             {
-              "text": "Sub-item with its own nested items",
-              "sub_bullets": ["Nested item a", "Nested item b"]
+              "text": "Second level item with its own sub-items",
+              "sub_bullets": [
+                "Third level item",
+                {
+                  "text": "Third level with fourth level below",
+                  "sub_bullets": ["Fourth level item 1", "Fourth level item 2"]
+                }
+              ]
             }
           ]
         }
@@ -424,11 +430,20 @@ REQUIRED JSON STRUCTURE:
   ]
 }
 
-IMPORTANT:
+IMPORTANT - HIERARCHICAL BULLETS:
+- CVs often have DEEPLY NESTED bullet structures (up to 4 levels)
+- Level 1: Main categories like "Business Analyst", "Responsibilities:"
+- Level 2: Sub-items like "Work with subject matter experts...", "Data mapping..."
+- Level 3: Lists under sub-items like "a) Securities", "b) Prices and FX Rates"
+- Level 4: Details under lists like "i. Benchmarks", "ii. Securities"
+- PRESERVE this hierarchy using nested "text" and "sub_bullets" objects
+- Look for indentation, letters (a, b, c), numbers (1, 2, 3), or roman numerals (i, ii, iii) as hierarchy indicators
+- If bullets are flat/simple with no sub-items, just use strings
+
+OTHER RULES:
 - Extract ALL roles from the CV
 - Include ALL bullet points from each role
-- Preserve original wording
-- PRESERVE HIERARCHICAL BULLET STRUCTURE: If the CV has nested/indented bullets (sub-items under main bullets), use the nested format with "text" and "sub_bullets". If bullets are flat/simple, just use strings.
+- Preserve original wording exactly
 - NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
 - "other_information" is OPTIONAL - only include if the CV has a section like Skills, Volunteering, Certifications, Languages, Interests, etc.
 - If no such section exists, set "other_information" to an empty array []
