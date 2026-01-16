@@ -353,9 +353,9 @@ REQUIRED JSON STRUCTURE:
 {
   "name": "Full Name",
   "location": "City, Country",
-  "right_to_work": "British Citizen (or leave empty if not stated)",
-  "notice": "Available immediately (or leave empty if not stated)",
-  "salary_expectations": "£45,000 (or leave empty if not stated)",
+  "right_to_work": "",
+  "notice": "",
+  "salary_expectations": "",
   "profile": "FULL profile/summary paragraph exactly as written",
   "education": [
     {
@@ -388,6 +388,7 @@ IMPORTANT:
 - Extract ALL roles from the CV
 - Include ALL bullet points from each role
 - Preserve original wording
+- NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
 - "other_information" is OPTIONAL - only include if the CV has a section like Skills, Volunteering, Certifications, Languages, Interests, etc.
 - If no such section exists, set "other_information" to an empty array []
 
