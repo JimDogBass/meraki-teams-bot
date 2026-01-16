@@ -183,7 +183,7 @@ RULES:
   - Good examples: "Leading Growth Equity Firm", "Big 4 Accountancy Firm", "Global Investment Bank", "Top-Tier PE Fund (>$20bn AUM)", "Boutique Real Estate Fund"
   - BAD: "Anonymised Investment Firm" - NEVER write this
 - Include company size/AUM where relevant (e.g., "PE Fund >$20bn AUM")
-- Include the last 2 COMPANIES - but show ALL roles they held at each company (e.g., if they were Associate then Senior Associate then VP at one firm, show all three titles)
+- Include ONLY the last 2 COMPANIES (not 3, not 4 - exactly 2) - but show ALL roles they held at each of those 2 companies (e.g., if they were Associate then Senior Associate then VP at one firm, show all three titles)
 - Include 3-4 bullet points per company highlighting achievements and responsibilities
 - Anonymise university names (e.g., "Top 100 University", "Russell Group University", "Ivy League University")
 - Do not include candidate name, contact details, or any identifying information
