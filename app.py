@@ -321,15 +321,16 @@ STRUCTURE (follow this order):
    - "Are you open to hearing about new opportunities at the moment?"
    - "I'm reaching out as I think you could be a great fit for a role I'm working on."
 2. Company intro: Anonymise the company - describe it generically (e.g., "a leading Global Private Bank", "a boutique International Bank", "a FTSE 250 Financial Services firm", "a Global Asset Manager")
-3. Role & contract: State the role title and that it's permanent
-4. Location & salary: Include location, hybrid working if mentioned, and salary range with "plus benefits and bonus"
-5. Selling points: Start with "It is a great role which..." and highlight 2-3 key responsibilities or selling points
+3. Role & contract: State the role title and that it's permanent (if stated)
+4. Location & salary: ONLY include if explicitly stated in the input - do not infer or make up location, hybrid working, or salary
+5. Selling points: Start with "It is a great role which..." and highlight 2-3 key responsibilities or selling points from the input
 6. Call to action: "Please drop me a note if interested in hearing more."
 7. Sign-off: "Best Regards"
 
 RULES:
 - ALWAYS anonymise the company name - never include the actual company name
-- Include concrete details: salary, location, hybrid working arrangements
+- NEVER infer or make up details - only include location, salary, hybrid working, contract type if explicitly stated in the input
+- If salary/location/hybrid not provided, simply omit those details from the message
 - Keep the selling points concise but specific to the role
 - Professional but warm tone
 - Do NOT include your name after "Best Regards" - the recruiter will add their own
