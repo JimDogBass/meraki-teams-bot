@@ -300,8 +300,8 @@ def add_bullet_point(doc, text, level=0):
     p = doc.add_paragraph()
 
     # Different bullets for 4 levels (matching typical CV hierarchy)
-    # Level 0: filled bullet, Level 1: open circle, Level 2: en dash, Level 3: arrow
-    bullets = ["•", "○", "–", "›"]
+    # Level 0: filled bullet, Level 1: en dash, Level 2: arrow, Level 3: open circle
+    bullets = ["•", "–", "›", "○"]
     bullet_char = bullets[min(level, len(bullets) - 1)]
 
     # Indentation increases with level
