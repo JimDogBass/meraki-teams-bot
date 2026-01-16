@@ -314,6 +314,11 @@ STRUCTURE (follow this order):
    - "Are you currently open to exploring new opportunities?"
    - "I came across your profile and wanted to reach out about a role that might interest you."
    - "Hope you're well – I wanted to get in touch about a role I think could be a great fit."
+   - "I hope this message finds you well. I have an opportunity that I thought might be of interest."
+   - "Your profile caught my attention and I wanted to share an opportunity with you."
+   - "I wanted to reach out as I have a role that aligns well with your background."
+   - "Are you open to hearing about new opportunities at the moment?"
+   - "I'm reaching out as I think you could be a great fit for a role I'm working on."
 2. Company intro: Anonymise the company - describe it generically (e.g., "a leading Global Private Bank", "a boutique International Bank", "a FTSE 250 Financial Services firm", "a Global Asset Manager")
 3. Role & contract: State the role title and that it's permanent
 4. Location & salary: Include location, hybrid working if mentioned, and salary range with "plus benefits and bonus"
