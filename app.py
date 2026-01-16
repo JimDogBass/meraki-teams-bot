@@ -183,18 +183,18 @@ RULES:
   - Good examples: "Leading Growth Equity Firm", "Big 4 Accountancy Firm", "Global Investment Bank", "Top-Tier PE Fund (>$20bn AUM)", "Boutique Real Estate Fund"
   - BAD: "Anonymised Investment Firm" - NEVER write this
 - Include company size/AUM where relevant (e.g., "PE Fund >$20bn AUM")
-- Only include the last 2 roles
-- Include 3-4 bullet points per role highlighting achievements and responsibilities
+- Include the last 2 COMPANIES - but show ALL roles they held at each company (e.g., if they were Associate then Senior Associate then VP at one firm, show all three titles)
+- Include 3-4 bullet points per company highlighting achievements and responsibilities
 - Anonymise university names (e.g., "Top 100 University", "Russell Group University", "Ivy League University")
 - Do not include candidate name, contact details, or any identifying information
 - Do not include gender
 - Do not include pronouns that reveal gender - use "they/their"
 - Use **bold** markdown formatting ONLY for company descriptions and role titles in the career section - NOT in the intro sentences
-- CRITICAL: You MUST add a blank line before each new section (before each company block, before Education). Bullets within a section stay grouped.
+- CRITICAL: Use --- (horizontal rule) to create visual separation between sections
 
 FUNCTION: Identify the candidate's actual function/specialism from their CV (e.g., Fundraising & IR, Private Equity, Credit Risk, Actuarial, Asset Management). Do NOT just use their job title - use their specialism.
 
-EXAMPLE OUTPUT (copy this spacing exactly):
+EXAMPLE OUTPUT (copy this format exactly, including the --- dividers):
 
 Subject: Candidate Spec - Vice President Fundraising & IR - New York
 
@@ -204,6 +204,8 @@ I am working with an exceptional Fundraising & Investor Relations professional w
 
 I have highlighted some of their career below; let me know if you would be interested in seeing a full resume or would be interested in having a chat about the general market.
 
+---
+
 **Leading Growth Equity Firm | New York**
 **Vice President (June 2024 – Present)**
 - Secured $250mm+ in capital from family offices, asset managers, and pensions
@@ -211,11 +213,15 @@ I have highlighted some of their career below; let me know if you would be inter
 - Drove institutional fundraising efforts in the Southeast and Midwest U.S.
 - Delivered portfolio updates to existing investors
 
+---
+
 **Boutique Private Equity Firm | New York**
-**Vice President (Feb 2023 – Jun 2024) | Senior Associate (Feb 2021 – Jan 2023)**
+**Vice President (Feb 2023 – Jun 2024) | Senior Associate (Feb 2021 – Jan 2023) | Associate (Jun 2019 – Jan 2021)**
 - Sourced and secured $700mm+ in new third-party capital across private equity and real estate
 - Expanded institutional investor network across alternative real estate and GP stakes
 - Supported product development through market research and structuring
+
+---
 
 **Education**
 Top 100 University - A.B. in Psychology (2017)"""
