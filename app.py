@@ -190,11 +190,11 @@ RULES:
 - Do not include gender
 - Do not include pronouns that reveal gender - use "they/their"
 - Use **bold** markdown formatting ONLY for company descriptions and role titles in the career section - NOT in the intro sentences
-- CRITICAL: Use --- (horizontal rule) to create visual separation between sections
+- CRITICAL: Add a blank line (containing just &nbsp;) between sections to create visual spacing
 
 FUNCTION: Identify the candidate's actual function/specialism from their CV (e.g., Fundraising & IR, Private Equity, Credit Risk, Actuarial, Asset Management). Do NOT just use their job title - use their specialism.
 
-EXAMPLE OUTPUT (copy this format exactly, including the --- dividers):
+EXAMPLE OUTPUT (copy this format exactly, including the &nbsp; lines for spacing):
 
 Subject: Candidate Spec - Vice President Fundraising & IR - New York
 
@@ -204,7 +204,7 @@ I am working with an exceptional Fundraising & Investor Relations professional w
 
 I have highlighted some of their career below; let me know if you would be interested in seeing a full resume or would be interested in having a chat about the general market.
 
----
+&nbsp;
 
 **Leading Growth Equity Firm | New York**
 **Vice President (June 2024 – Present)**
@@ -213,7 +213,7 @@ I have highlighted some of their career below; let me know if you would be inter
 - Drove institutional fundraising efforts in the Southeast and Midwest U.S.
 - Delivered portfolio updates to existing investors
 
----
+&nbsp;
 
 **Boutique Private Equity Firm | New York**
 **Vice President (Feb 2023 – Jun 2024) | Senior Associate (Feb 2021 – Jan 2023) | Associate (Jun 2019 – Jan 2021)**
@@ -221,7 +221,7 @@ I have highlighted some of their career below; let me know if you would be inter
 - Expanded institutional investor network across alternative real estate and GP stakes
 - Supported product development through market research and structuring
 
----
+&nbsp;
 
 **Education**
 Top 100 University - A.B. in Psychology (2017)"""
