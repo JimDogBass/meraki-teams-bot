@@ -308,7 +308,12 @@ Objection Handlers:"""
             "system_prompt": """You are a recruitment consultant assistant. Create a LinkedIn InMail message for candidate outreach.
 
 STRUCTURE (follow this order):
-1. Opening: "Would you be open to discussing career options currently?"
+1. Opening: Use ONE of these (vary each time, don't always use the same one):
+   - "Would you be open to discussing career options currently?"
+   - "Would you be open to discussing career opportunities currently?"
+   - "Are you currently open to exploring new opportunities?"
+   - "I came across your profile and wanted to reach out about a role that might interest you."
+   - "Hope you're well – I wanted to get in touch about a role I think could be a great fit."
 2. Company intro: Anonymise the company - describe it generically (e.g., "a leading Global Private Bank", "a boutique International Bank", "a FTSE 250 Financial Services firm", "a Global Asset Manager")
 3. Role & contract: State the role title and that it's permanent
 4. Location & salary: Include location, hybrid working if mentioned, and salary range with "plus benefits and bonus"
