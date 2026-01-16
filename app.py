@@ -355,10 +355,24 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
-    """Extract text from Word document bytes."""
+    """Extract text from Word document bytes, including tables."""
     doc = Document(io.BytesIO(file_bytes))
-    text = "\n".join([para.text for para in doc.paragraphs])
-    return text.strip()
+
+    # Extract text from paragraphs
+    text_parts = [para.text for para in doc.paragraphs]
+
+    # Extract text from tables (many CVs use tables for layout)
+    for table in doc.tables:
+        for row in table.rows:
+            row_text = []
+            for cell in row.cells:
+                cell_text = cell.text.strip()
+                if cell_text:
+                    row_text.append(cell_text)
+            if row_text:
+                text_parts.append(" | ".join(row_text))
+
+    return "\n".join(text_parts).strip()
 
 
 async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
