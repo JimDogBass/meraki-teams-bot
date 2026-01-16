@@ -163,9 +163,9 @@ def create_meraki_cv(cv_data: dict) -> bytes:
                 add_position_line(doc, position)
                 add_blank_line(doc)  # Space after position
 
-            # Bullet points with actual bullets
+            # Bullet points (supports nested/hierarchical structure)
             for bullet in job.get("bullets", []):
-                add_bullet_point(doc, bullet)
+                add_nested_bullets(doc, bullet)
 
             # Add blank line between jobs (except last)
             if i < len(work_exp) - 1:
@@ -295,15 +295,45 @@ def add_position_line(doc, position):
     return p
 
 
-def add_bullet_point(doc, text):
-    """Add a bullet point line with proper hanging indent."""
+def add_bullet_point(doc, text, level=0):
+    """Add a bullet point line with proper hanging indent. Supports multiple levels."""
     p = doc.add_paragraph()
-    # Set hanging indent so wrapped text aligns with first line (not bullet)
-    p.paragraph_format.left_indent = Cm(0.6)
-    p.paragraph_format.first_line_indent = Cm(-0.6)
-    p.add_run("•\t" + text)
+
+    # Different bullets for different levels
+    bullets = ["•", "○", "-"]
+    bullet_char = bullets[min(level, len(bullets) - 1)]
+
+    # Indentation increases with level
+    base_indent = Cm(0.6)
+    level_indent = Cm(0.6 * level)
+
+    p.paragraph_format.left_indent = base_indent + level_indent
+    p.paragraph_format.first_line_indent = Cm(-0.4)
+    p.add_run(f"{bullet_char}\t{text}")
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     return p
+
+
+def add_nested_bullets(doc, bullet_item, level=0):
+    """
+    Recursively add bullets with nested structure.
+    bullet_item can be:
+    - A string (simple bullet)
+    - A dict with 'text' and optional 'sub_bullets'
+    """
+    if isinstance(bullet_item, str):
+        # Simple string bullet
+        add_bullet_point(doc, bullet_item, level)
+    elif isinstance(bullet_item, dict):
+        # Nested bullet with potential sub-bullets
+        text = bullet_item.get("text", "")
+        if text:
+            add_bullet_point(doc, text, level)
+
+        # Process sub-bullets recursively
+        sub_bullets = bullet_item.get("sub_bullets", [])
+        for sub_item in sub_bullets:
+            add_nested_bullets(doc, sub_item, level + 1)
 
 
 def parse_cv_json(ai_response: str) -> dict:
@@ -371,8 +401,18 @@ REQUIRED JSON STRUCTURE:
       "company": "Company Name",
       "position": "Job Title",
       "bullets": [
-        "Full original bullet point text",
-        "Another bullet with complete wording"
+        "Simple bullet point as a string",
+        {
+          "text": "Main bullet point with sub-items",
+          "sub_bullets": [
+            "Sub-item 1",
+            "Sub-item 2",
+            {
+              "text": "Sub-item with its own nested items",
+              "sub_bullets": ["Nested item a", "Nested item b"]
+            }
+          ]
+        }
       ]
     }
   ],
@@ -388,6 +428,7 @@ IMPORTANT:
 - Extract ALL roles from the CV
 - Include ALL bullet points from each role
 - Preserve original wording
+- PRESERVE HIERARCHICAL BULLET STRUCTURE: If the CV has nested/indented bullets (sub-items under main bullets), use the nested format with "text" and "sub_bullets". If bullets are flat/simple, just use strings.
 - NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
 - "other_information" is OPTIONAL - only include if the CV has a section like Skills, Volunteering, Certifications, Languages, Interests, etc.
 - If no such section exists, set "other_information" to an empty array []
