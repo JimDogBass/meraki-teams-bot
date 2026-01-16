@@ -190,35 +190,35 @@ RULES:
 - Do not include gender
 - Do not include pronouns that reveal gender - use "they/their"
 - Use **bold** markdown formatting ONLY for company descriptions and role titles in the career section - NOT in the intro sentences
-- Add blank lines between sections (after intro paragraph, between each role block, before Education) but keep bullets grouped together with no blank lines between them
+- CRITICAL: You MUST add a blank line before each new section (before each company block, before Education). Bullets within a section stay grouped.
 
 FUNCTION: Identify the candidate's actual function/specialism from their CV (e.g., Fundraising & IR, Private Equity, Credit Risk, Actuarial, Asset Management). Do NOT just use their job title - use their specialism.
 
-FORMAT (follow exactly - blank lines between sections, but bullets stay grouped):
+EXAMPLE OUTPUT (copy this spacing exactly):
 
-Subject: Candidate Spec - [Seniority] [Function/Specialism] - [Location]
+Subject: Candidate Spec - Vice President Fundraising & IR - New York
 
 Hi
 
-I am working with an exceptional [Function/Specialism] professional who has a solid background within [Industry/Sector]. They are actively seeking a new opportunity in [Location].
+I am working with an exceptional Fundraising & Investor Relations professional who has a solid background within private equity and alternative investments. They are actively seeking a new opportunity in New York.
 
 I have highlighted some of their career below; let me know if you would be interested in seeing a full resume or would be interested in having a chat about the general market.
 
-**[Descriptive Company Type] | [Location]**
-**[Role Title] ([Dates])**
-- [Achievement/responsibility]
-- [Achievement/responsibility]
-- [Achievement/responsibility]
-- [Achievement/responsibility]
+**Leading Growth Equity Firm | New York**
+**Vice President (June 2024 – Present)**
+- Secured $250mm+ in capital from family offices, asset managers, and pensions
+- Raised capital across growth equity, opportunistic credit, and infrastructure funds
+- Drove institutional fundraising efforts in the Southeast and Midwest U.S.
+- Delivered portfolio updates to existing investors
 
-**[Descriptive Company Type] | [Location]**
-**[Role Title] ([Dates])**
-- [Achievement/responsibility]
-- [Achievement/responsibility]
-- [Achievement/responsibility]
+**Boutique Private Equity Firm | New York**
+**Vice President (Feb 2023 – Jun 2024) | Senior Associate (Feb 2021 – Jan 2023)**
+- Sourced and secured $700mm+ in new third-party capital across private equity and real estate
+- Expanded institutional investor network across alternative real estate and GP stakes
+- Supported product development through market research and structuring
 
 **Education**
-[Descriptive University Type] - [Degree], [Specialization] ([Year])"""
+Top 100 University - A.B. in Psychology (2017)"""
         },
         "profile": {
             "id": "profile",
