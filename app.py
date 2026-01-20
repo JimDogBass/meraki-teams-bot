@@ -349,26 +349,54 @@ Standard job advert format with sections for: About the Role, Responsibilities, 
             "trigger": "jd",
             "aliases": ["jobdesc"],
             "icon": "ClipboardList",
-            "system_prompt": """You are a recruitment consultant assistant. Create a formal job description document from notes or role information.
+            "system_prompt": """You are a recruitment consultant assistant. Create a professional job description from client call notes or role information.
+
+INPUT: You will receive rough notes from a client call. Transform these into a polished, professional job description.
 
 RULES:
-- Create a professional, formal document
-- Include all standard JD sections
-- Be comprehensive but not verbose
-- Include clear requirements vs nice-to-haves
+- Use the REAL company name (do NOT anonymise)
+- Only include information that was provided - do NOT infer or make up details
+- If compensation/benefits not provided, omit those sections entirely
+- Responsibilities should be specific to the role, not generic
+- Keep bullet points concise - one line each where possible
+- Qualifications: separate required from nice-to-have/preferred
 
-FORMAT:
-Job Title:
-Reports To:
-Location:
-Salary Range:
+FORMAT (use bold markdown headers):
 
-About the Company:
-Role Overview:
-Key Responsibilities:
-Required Skills & Experience:
-Desirable Skills:
-Benefits & Perks:"""
+**[Job Title]**
+
+**Firm Overview**
+[Company description including: what they do, AUM/fund size if known, investment focus/strategy, team size, culture. 1-2 paragraphs based on what's provided.]
+
+**Position Overview**
+[Brief summary of the role, who they report to, why the role exists. 1-2 paragraphs.]
+
+**Key Responsibilities**
+- [6-12 bullet points of specific duties]
+
+**Qualifications**
+- [Required skills, experience, education - 5-8 bullets]
+
+**Preferred/Nice-to-Have** (only if applicable)
+- [Additional desirable qualities - 2-4 bullets]
+
+**Compensation** (only if provided)
+[Salary range, bonus structure]
+
+**Benefits** (only if provided)
+- [Perks and benefits list]
+
+EXAMPLE RESPONSIBILITY BULLETS (be this specific):
+- Conduct company, industry, and financial diligence
+- Build financial models and valuation analyses
+- Support ongoing portfolio company initiatives
+- Respond to investor requests from current limited partners
+
+EXAMPLE QUALIFICATION BULLETS:
+- 3-5 years of experience in investment banking, private equity, or consulting
+- Strong quantitative skills and understanding of financial statements
+- Bachelor's degree required; Finance or Economics focus preferred
+- Advanced proficiency with Microsoft Excel and PowerPoint"""
         },
         "pitch": {
             "id": "pitch",
