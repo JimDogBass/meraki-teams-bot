@@ -265,7 +265,8 @@ RULES:
   - BAD: "Anonymised Investment Firm" - NEVER write this
 - Include company size/AUM where relevant (e.g., "PE Fund >$20bn AUM")
 - Include ONLY the last 2 COMPANIES (not 3, not 4 - exactly 2) - but show ALL roles they held at each of those 2 companies (e.g., if they were Associate then Senior Associate then VP at one firm, show all three titles)
-- Include 3-4 bullet points per company highlighting achievements and responsibilities
+- BE CONCISE: Include 3-4 SHORT bullet points per company - each bullet should be one line, not a paragraph
+- Keep the intro brief - one or two sentences max
 - Anonymise university names (e.g., "Top 100 University", "Russell Group University", "Ivy League University")
 - Do not include candidate name, contact details, or any identifying information
 - Do not include gender
@@ -281,26 +282,25 @@ Subject: Candidate Spec - Vice President Fundraising & IR - New York
 
 Hi
 
-I am working with an exceptional Fundraising & Investor Relations professional who has a solid background within private equity and alternative investments. They are actively seeking a new opportunity in New York.
-
-I have highlighted some of their career below; let me know if you would be interested in seeing a full resume or would be interested in having a chat about the general market.
+I am working with an exceptional Fundraising & IR professional with a strong background in private equity and alternative investments, actively seeking a new opportunity in New York. Below are highlights of their career; let me know if you would like to see a full resume or discuss the market.
 
 &nbsp;
 
 **Leading Growth Equity Firm | New York**
 **Vice President (June 2024 – Present)**
-- Secured $250mm+ in capital from family offices, asset managers, and pensions
-- Raised capital across growth equity, opportunistic credit, and infrastructure funds
-- Drove institutional fundraising efforts in the Southeast and Midwest U.S.
-- Delivered portfolio updates to existing investors
+- Secured $250mm+ in capital from family offices and institutional investors
+- Raised capital across growth equity, credit, climate, and infrastructure funds
+- Led fundraising efforts in the Southeast and Midwest U.S.
+- Delivered portfolio updates to investors, enhancing client service
 
 &nbsp;
 
 **Boutique Private Equity Firm | New York**
 **Vice President (Feb 2023 – Jun 2024) | Senior Associate (Feb 2021 – Jan 2023) | Associate (Jun 2019 – Jan 2021)**
-- Sourced and secured $700mm+ in new third-party capital across private equity and real estate
-- Expanded institutional investor network across alternative real estate and GP stakes
-- Supported product development through market research and structuring
+- Secured $700mm+ in new capital across private equity and real estate
+- Expanded investor network and originated new opportunities
+- Conducted market research and supported product development
+- Advised 25+ managers on capital formation and fundraising strategy
 
 &nbsp;
 
