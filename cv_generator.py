@@ -104,6 +104,15 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     add_field_line(doc, "Notice", cv_data.get("notice", ""))
     add_field_line(doc, "Salary expectations", cv_data.get("salary_expectations", ""))
 
+    # === IT/SYSTEMS (inline after personal details) ===
+    it_systems = cv_data.get("it_systems", "")
+    if it_systems:
+        add_blank_line(doc)
+        p = doc.add_paragraph()
+        label_run = p.add_run("IT/Systems: ")
+        label_run.bold = True
+        p.add_run(it_systems)
+
     # === EDUCATION ===
     education = cv_data.get("education", [])
     if education:
@@ -232,14 +241,17 @@ def add_section_header(doc, text):
 
 
 def add_field_line(doc, label, value):
-    """Add a field line with tabbed label and value (e.g., '\tName\tJohn Smith')."""
+    """Add a field line with bold tabbed label and value (e.g., '\tName\tJohn Smith')."""
     p = doc.add_paragraph()
     # Set up tab stops
     tab_stops = p.paragraph_format.tab_stops
     tab_stops.add_tab_stop(TAB_RIGHT_POS, WD_TAB_ALIGNMENT.RIGHT)
     tab_stops.add_tab_stop(TAB_LEFT_POS, WD_TAB_ALIGNMENT.LEFT)
-    # Add tabbed content
-    p.add_run(f"\t{label}\t{value if value else ''}")
+    # Add tabbed content with bold label
+    p.add_run("\t")
+    label_run = p.add_run(label)
+    label_run.bold = True
+    p.add_run(f"\t{value if value else ''}")
     return p
 
 
@@ -378,7 +390,8 @@ CRITICAL RULES:
 3. Use short date format: "Jan 23" not "January 2023"
 4. Extract ALL work experience entries
 5. Preserve ALL bullet points from each role
-6. Only include "other_information" if explicitly present in the CV (skills, volunteering, certifications, etc.)
+6. Extract IT/Systems separately - do NOT include them in other_information
+7. Only include "other_information" if explicitly present in the CV (volunteering, certifications, languages, etc.) - NOT IT/systems
 
 REQUIRED JSON STRUCTURE:
 {
@@ -387,6 +400,7 @@ REQUIRED JSON STRUCTURE:
   "right_to_work": "",
   "notice": "",
   "salary_expectations": "",
+  "it_systems": "Comma-separated list of software, systems, tools (e.g., Salesforce, Backstop, Dealcloud, Excel, Bloomberg)",
   "profile": "FULL profile/summary paragraph exactly as written",
   "education": [
     {
@@ -445,7 +459,9 @@ OTHER RULES:
 - Include ALL bullet points from each role
 - Preserve original wording exactly
 - NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
-- "other_information" is OPTIONAL - only include if the CV has a section like Skills, Volunteering, Certifications, Languages, Interests, etc.
+- "it_systems" should contain ANY software, systems, or tools mentioned in the CV (CRM, databases, financial platforms, Microsoft Office, etc.) - extract from skills sections, bullet points, or anywhere mentioned
+- If no IT/systems found, set "it_systems" to an empty string ""
+- "other_information" is OPTIONAL - only include if the CV has a section like Volunteering, Certifications, Languages, Interests, etc. - do NOT include IT/systems here
 - If no such section exists, set "other_information" to an empty array []
 
 Extract the CV data now:"""
