@@ -289,3 +289,80 @@ gunicorn --bind=0.0.0.0:$PORT --timeout 600 --worker-class=gevent --workers=2 ap
 - **Gevent workers** - Non-blocking workers for large CV processing
 - **Added dependencies:** azure-storage-blob, gevent
 - **Added files:** cv_generator.py, templates/, Procfile, railway.toml
+
+---
+
+## Recent Changes (20 Jan 2025)
+
+### CV Reformat Enhancements
+- **Bold labels** in Personal Details section (Name:, Location:, Email:, Phone:, LinkedIn:)
+- **IT/Systems section** - Extracts software, tools, systems (e.g., Salesforce, Bloomberg, Excel)
+- **Qualifications section** - Professional certifications (ACA, ACCA, CFA, CAIA, PRINCE2, Scrum Master, PMP, CTA, ATT, LPC, SQE, Bar admissions, FCA/compliance certs)
+- **.doc file support** - Added antiword via nixpacks.toml for old Word format files
+
+### Spec Prompt Update
+- **More concise output** - Shorter intro (1 paragraph), punchier bullet points
+- Based on user feedback preferring shorter specs
+
+### JD Prompt Update
+- **Analyzed reference JDs** from `C:\Users\JoelBentley\OneDrive - Meraki Talent\Job Descriptions`
+- **New format**: Firm Overview, Position Overview, Key Responsibilities, Qualifications, Preferred/Nice-to-Have
+- **Uses real company names** (not anonymised)
+- **Only includes provided info** - doesn't infer details
+- **Designed for client call notes** as input
+
+### Conversational Refinement Feature
+- **Refinement mode** - After generating output, users can refine with free-text instructions
+- **Done / Start New buttons** - Appear after each output
+- **refine_output() function** - Takes original output + user instruction, returns refined version
+- **State management** - `get_refinement_state()`, `set_refinement_state()`, `clear_refinement_state()` in Azure Table Storage
+- **Bug fix** - Added `check_explicit_trigger()` to prevent AI classification in refinement mode (e.g., "a bit shorter" was incorrectly triggering CV reformat)
+
+### New Files
+- **nixpacks.toml** - Installs antiword for .doc support on Railway
+
+---
+
+## Pending Features
+
+### 1. Bing Search API for Firm Research (JD Function)
+**Status:** Not started - needs API setup
+
+**Purpose:** When JD notes don't have much firm info, automatically research the company to produce a proper Firm Overview section.
+
+**Implementation Plan:**
+1. Create Bing Search v7 resource in Azure Portal (free tier: 1,000 calls/month)
+2. Add BING_SEARCH_API_KEY to Railway environment variables
+3. Add `research_firm(company_name)` function in app.py
+4. Modify JD generation to:
+   - Check if firm overview info is sparse in notes
+   - If sparse, call Bing Search API for "[Company Name]"
+   - Extract relevant info (what they do, size, industry)
+   - Include in prompt context for JD generation
+5. Works for all firm types: PE, FS, C&I, insurance, professional services
+
+**Azure Setup Steps:**
+1. Go to Azure Portal → Create Resource
+2. Search "Bing Search v7"
+3. Create resource (S1 tier or free tier)
+4. Copy API key from Keys and Endpoint
+5. Add to Railway: `BING_SEARCH_API_KEY=<key>`
+
+### 2. UK Job Description Formats
+**Status:** Pending - user to add UK reference JDs
+
+**Purpose:** Ensure JD prompt handles UK-specific conventions:
+- Notice period terminology
+- Benefits (pension vs 401k)
+- Salary conventions (£)
+- UK qualification names
+
+**Action:** User to add UK JDs to reference folder, then review and update prompt if needed.
+
+---
+
+## Reference Folders
+
+- **Job Descriptions:** `C:\Users\JoelBentley\OneDrive - Meraki Talent\Job Descriptions`
+  - Contains ~40 reference JDs (mostly US, need UK additions)
+  - Used to inform JD prompt format and structure
