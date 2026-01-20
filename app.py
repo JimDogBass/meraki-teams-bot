@@ -131,6 +131,85 @@ def clear_pending_role(conversation_id: str):
         print(f"[DEBUG] Error clearing pending role: {e}")
 
 
+# Refinement state - tracks output for conversational refinement
+REFINEMENT_TTL_SECONDS = 1800  # 30 minutes
+
+
+def get_refinement_state(conversation_id: str) -> dict:
+    """Get refinement state for a conversation from Azure Table Storage."""
+    if not table_service_client:
+        return None
+
+    try:
+        table_client = table_service_client.get_table_client("BotState")
+        row_key = str(hash(conversation_id) & 0xFFFFFFFF)
+
+        try:
+            entity = table_client.get_entity(partition_key="refinement", row_key=row_key)
+            timestamp = entity.get("Timestamp_", 0)
+
+            if time.time() - timestamp < REFINEMENT_TTL_SECONDS:
+                print(f"[DEBUG] Found refinement state for role: {entity.get('RoleId')}")
+                return {
+                    "output": entity.get("Output", ""),
+                    "role_id": entity.get("RoleId", "")
+                }
+            else:
+                table_client.delete_entity(partition_key="refinement", row_key=row_key)
+                print("[DEBUG] Refinement state expired")
+        except Exception:
+            print("[DEBUG] No refinement state found")
+            pass
+    except Exception as e:
+        print(f"[DEBUG] Error getting refinement state: {e}")
+
+    return None
+
+
+def set_refinement_state(conversation_id: str, output: str, role_id: str):
+    """Set refinement state in Azure Table Storage."""
+    if not table_service_client:
+        return
+
+    try:
+        table_client = table_service_client.get_table_client("BotState")
+
+        try:
+            table_service_client.create_table("BotState")
+        except Exception:
+            pass
+
+        row_key = str(hash(conversation_id) & 0xFFFFFFFF)
+        # Truncate output if too long for table storage (max 64KB per property)
+        truncated_output = output[:60000] if len(output) > 60000 else output
+        entity = {
+            "PartitionKey": "refinement",
+            "RowKey": row_key,
+            "ConversationId": conversation_id[:900],
+            "Output": truncated_output,
+            "RoleId": role_id,
+            "Timestamp_": time.time()
+        }
+        table_client.upsert_entity(entity)
+        print(f"[DEBUG] Set refinement state for role: {role_id}")
+    except Exception as e:
+        print(f"[DEBUG] Error setting refinement state: {e}")
+
+
+def clear_refinement_state(conversation_id: str):
+    """Clear refinement state from Azure Table Storage."""
+    if not table_service_client:
+        return
+
+    try:
+        table_client = table_service_client.get_table_client("BotState")
+        row_key = str(hash(conversation_id) & 0xFFFFFFFF)
+        table_client.delete_entity(partition_key="refinement", row_key=row_key)
+        print(f"[DEBUG] Cleared refinement state")
+    except Exception as e:
+        print(f"[DEBUG] Error clearing refinement state: {e}")
+
+
 def load_roles_from_table():
     """Load roles from Azure Table Storage."""
     global roles_cache, roles_cache_timestamp
@@ -583,6 +662,93 @@ def create_help_card():
     )
 
 
+def create_refinement_card():
+    """Create an Adaptive Card with refinement options (for non-reformat outputs)."""
+    card = {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.4",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": "Want to make changes? Just tell me what to adjust, or:",
+                "wrap": True,
+                "size": "Small",
+                "color": "Accent"
+            }
+        ],
+        "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "Done",
+                "data": {"action": "exit_refinement"}
+            },
+            {
+                "type": "Action.Submit",
+                "title": "Start New",
+                "data": {"action": "start_new"}
+            }
+        ]
+    }
+
+    return Attachment(
+        content_type="application/vnd.microsoft.card.adaptive",
+        content=card
+    )
+
+
+def create_start_new_card():
+    """Create an Adaptive Card with just Start New button (for reformat outputs)."""
+    card = {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.4",
+        "body": [],
+        "actions": [
+            {
+                "type": "Action.Submit",
+                "title": "Start New",
+                "data": {"action": "start_new"}
+            }
+        ]
+    }
+
+    return Attachment(
+        content_type="application/vnd.microsoft.card.adaptive",
+        content=card
+    )
+
+
+def refine_output(original_output: str, user_instruction: str, role_id: str) -> str:
+    """Call Azure OpenAI to refine the output based on user instruction."""
+    roles = get_roles()
+    role = roles.get(role_id, {})
+    role_name = role.get("name", "content")
+
+    refinement_prompt = f"""Here is the previous {role_name} output:
+
+{original_output}
+
+The user has requested the following changes:
+{user_instruction}
+
+Return the revised version, maintaining the same format and style. Only output the revised content, no explanations."""
+
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": f"You are a helpful assistant that refines {role_name} content based on user feedback. Maintain the original format and style while applying the requested changes."},
+                {"role": "user", "content": refinement_prompt}
+            ],
+            max_tokens=8000,
+            timeout=120
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Error refining output: {str(e)}"
+
+
 def resolve_role(message: str, card_data: dict = None) -> tuple:
     """
     Hybrid routing: resolve which role the user wants.
@@ -669,10 +835,28 @@ async def on_turn(turn_context: TurnContext):
 
         # Handle help command
         if user_text.lower().strip() in ["help", "/help", "menu", "start", "hi", "hello"]:
+            clear_refinement_state(conversation_id)
             help_card = create_help_card()
             reply = Activity(type="message", attachments=[help_card])
             await turn_context.send_activity(reply)
             return
+
+        # Handle refinement button presses
+        if card_data:
+            action = card_data.get("action")
+            if action == "exit_refinement":
+                clear_refinement_state(conversation_id)
+                await turn_context.send_activity("Great! Let me know if you need anything else.")
+                help_card = create_help_card()
+                reply = Activity(type="message", attachments=[help_card])
+                await turn_context.send_activity(reply)
+                return
+            elif action == "start_new":
+                clear_refinement_state(conversation_id)
+                help_card = create_help_card()
+                reply = Activity(type="message", attachments=[help_card])
+                await turn_context.send_activity(reply)
+                return
 
         # Extract text from any file attachments
         attachment_texts = []
@@ -694,8 +878,35 @@ async def on_turn(turn_context: TurnContext):
             else:
                 combined_input = file_content
 
+        # Check for refinement mode BEFORE resolve_role
+        # If user has text and we're in refinement mode, treat it as a refinement request
+        # UNLESS the text contains a trigger word or a role button was pressed
+        refinement_state = get_refinement_state(conversation_id)
+
         # Resolve which role to use
         role_id, content_for_role = resolve_role(user_text, card_data)
+
+        # Handle refinement mode
+        if refinement_state and user_text and not role_id and not card_data:
+            # User sent text while in refinement mode - treat as refinement instruction
+            print(f"[DEBUG] In refinement mode, processing instruction: {user_text[:50]}...")
+            refined_output = refine_output(
+                refinement_state["output"],
+                user_text,
+                refinement_state["role_id"]
+            )
+            # Update stored output with refined version
+            set_refinement_state(conversation_id, refined_output, refinement_state["role_id"])
+            # Send refined output with refinement buttons
+            refinement_card = create_refinement_card()
+            reply = Activity(type="message", text=refined_output, attachments=[refinement_card])
+            await turn_context.send_activity(reply)
+            return
+
+        # If a role was identified (trigger word or button), exit refinement mode
+        if role_id and refinement_state:
+            clear_refinement_state(conversation_id)
+            print(f"[DEBUG] Exiting refinement mode due to role selection: {role_id}")
 
         # If card button was pressed with no content, ask for input and save pending role
         if role_id and card_data and not combined_input.strip():
@@ -764,7 +975,7 @@ async def on_turn(turn_context: TurnContext):
             await turn_context.send_activity(f"Error calling AI: {str(e)}")
             return
 
-        # Handle special output types
+        # Handle special output types (CV Reformat - no refinement mode)
         if role.get("output_type") == "word":
             # Generate Word document for CV reformat
             try:
@@ -795,11 +1006,16 @@ async def on_turn(turn_context: TurnContext):
                     )
                     download_url = f"https://{account_name}.blob.core.windows.net/cv-outputs/{filename}?{sas_token}"
 
-                    await turn_context.send_activity(
-                        f"Here's the reformatted CV for **{cv_data.get('name', 'the candidate')}**:\n\n"
-                        f"[Download {filename}]({download_url})\n\n"
-                        f"_Link expires in 7 days_"
+                    # Send output with Start New button (no refinement for reformat)
+                    start_new_card = create_start_new_card()
+                    reply = Activity(
+                        type="message",
+                        text=f"Here's the reformatted CV for **{cv_data.get('name', 'the candidate')}**:\n\n"
+                             f"[Download {filename}]({download_url})\n\n"
+                             f"_Link expires in 7 days_",
+                        attachments=[start_new_card]
                     )
+                    await turn_context.send_activity(reply)
                 else:
                     await turn_context.send_activity("Error: Storage not configured for file uploads")
             except ValueError as e:
@@ -808,7 +1024,12 @@ async def on_turn(turn_context: TurnContext):
                 await turn_context.send_activity(f"Error generating Word document: {str(e)}")
             return
 
-        await turn_context.send_activity(reply_text)
+        # For non-reformat outputs: enter refinement mode
+        # Store output and show refinement options
+        set_refinement_state(conversation_id, reply_text, role_id)
+        refinement_card = create_refinement_card()
+        reply = Activity(type="message", text=reply_text, attachments=[refinement_card])
+        await turn_context.send_activity(reply)
 
 
 @app.route("/")
