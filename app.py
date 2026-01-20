@@ -4,6 +4,8 @@ import io
 import time
 import base64
 import httpx
+import tempfile
+import subprocess
 from flask import Flask, request, Response
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, Attachment
@@ -454,6 +456,28 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
     return "\n".join(text_parts).strip()
 
 
+def extract_text_from_doc(file_bytes: bytes) -> str:
+    """Extract text from old .doc format using antiword."""
+    with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp.flush()
+        tmp_path = tmp.name
+
+    try:
+        result = subprocess.run(
+            ['antiword', tmp_path],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        else:
+            raise ValueError(f"antiword failed: {result.stderr}")
+    finally:
+        os.unlink(tmp_path)
+
+
 async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
     """Download attachment from Teams."""
     download_url = None
@@ -489,7 +513,7 @@ async def extract_text_from_attachment(attachment, turn_context: TurnContext) ->
         elif name.lower().endswith('.docx') or 'wordprocessingml' in content_type.lower():
             return extract_text_from_docx(file_bytes)
         elif name.lower().endswith('.doc'):
-            return "[Error: Old .doc format not supported. Please save as .docx]"
+            return extract_text_from_doc(file_bytes)
         else:
             return f"[Unsupported file type: {name}]"
     except Exception as e:
