@@ -749,6 +749,41 @@ Return the revised version, maintaining the same format and style. Only output t
         return f"Error refining output: {str(e)}"
 
 
+def check_explicit_trigger(message: str) -> str:
+    """
+    Check for EXPLICIT role triggers only (prefix or first word).
+    Does NOT use AI classification.
+    Returns role_id if found, None otherwise.
+    """
+    if not message:
+        return None
+
+    roles = get_roles()
+    message_lower = message.lower().strip()
+    words = message_lower.split()
+
+    # Build lookup dictionary
+    trigger_to_role = {}
+    for role_id, role in roles.items():
+        trigger_to_role[role["trigger"].lower()] = role_id
+        for alias in role["aliases"]:
+            trigger_to_role[alias.lower()] = role_id
+
+    # Check for explicit prefix (/spec, !spec)
+    if words and len(words[0]) > 1:
+        first_word = words[0]
+        if first_word.startswith('/') or first_word.startswith('!'):
+            trigger = first_word[1:]
+            if trigger in trigger_to_role:
+                return trigger_to_role[trigger]
+
+    # Check if first word is a known trigger
+    if words and words[0] in trigger_to_role:
+        return trigger_to_role[words[0]]
+
+    return None
+
+
 def resolve_role(message: str, card_data: dict = None) -> tuple:
     """
     Hybrid routing: resolve which role the user wants.
@@ -879,34 +914,43 @@ async def on_turn(turn_context: TurnContext):
                 combined_input = file_content
 
         # Check for refinement mode BEFORE resolve_role
-        # If user has text and we're in refinement mode, treat it as a refinement request
-        # UNLESS the text contains a trigger word or a role button was pressed
         refinement_state = get_refinement_state(conversation_id)
 
-        # Resolve which role to use
-        role_id, content_for_role = resolve_role(user_text, card_data)
+        # If in refinement mode, only check for EXPLICIT triggers (not AI classification)
+        # This prevents "a bit shorter" from being classified as "reformat"
+        if refinement_state and user_text and not card_data:
+            # Check for explicit triggers only (prefix or first-word match)
+            explicit_role = check_explicit_trigger(user_text)
 
-        # Handle refinement mode
-        if refinement_state and user_text and not role_id and not card_data:
-            # User sent text while in refinement mode - treat as refinement instruction
-            print(f"[DEBUG] In refinement mode, processing instruction: {user_text[:50]}...")
-            refined_output = refine_output(
-                refinement_state["output"],
-                user_text,
-                refinement_state["role_id"]
-            )
-            # Update stored output with refined version
-            set_refinement_state(conversation_id, refined_output, refinement_state["role_id"])
-            # Send refined output with refinement buttons
-            refinement_card = create_refinement_card()
-            reply = Activity(type="message", text=refined_output, attachments=[refinement_card])
-            await turn_context.send_activity(reply)
-            return
+            if explicit_role:
+                # User explicitly requested a new role - exit refinement
+                clear_refinement_state(conversation_id)
+                print(f"[DEBUG] Exiting refinement mode due to explicit trigger: {explicit_role}")
+                role_id = explicit_role
+                content_for_role = user_text
+            else:
+                # No explicit trigger - treat as refinement instruction
+                print(f"[DEBUG] In refinement mode, processing instruction: {user_text[:50]}...")
+                refined_output = refine_output(
+                    refinement_state["output"],
+                    user_text,
+                    refinement_state["role_id"]
+                )
+                # Update stored output with refined version
+                set_refinement_state(conversation_id, refined_output, refinement_state["role_id"])
+                # Send refined output with refinement buttons
+                refinement_card = create_refinement_card()
+                reply = Activity(type="message", text=refined_output, attachments=[refinement_card])
+                await turn_context.send_activity(reply)
+                return
+        else:
+            # Not in refinement mode - use full resolve_role (including AI classification)
+            role_id, content_for_role = resolve_role(user_text, card_data)
 
-        # If a role was identified (trigger word or button), exit refinement mode
-        if role_id and refinement_state:
+        # If a role was identified via button while in refinement mode, exit refinement
+        if card_data and refinement_state:
             clear_refinement_state(conversation_id)
-            print(f"[DEBUG] Exiting refinement mode due to role selection: {role_id}")
+            print(f"[DEBUG] Exiting refinement mode due to button press")
 
         # If card button was pressed with no content, ask for input and save pending role
         if role_id and card_data and not combined_input.strip():
