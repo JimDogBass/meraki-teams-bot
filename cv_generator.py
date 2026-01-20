@@ -410,7 +410,7 @@ REQUIRED JSON STRUCTURE:
   "notice": "",
   "salary_expectations": "",
   "it_systems": "Comma-separated list of software, systems, tools (e.g., Salesforce, Backstop, Dealcloud, Excel, Bloomberg)",
-  "qualifications": "Professional qualifications/certifications with year if known (e.g., ACCA (2007), CFA (2021), ACA, CAIA, PRINCE2, Scrum Master, MSP, PMP, Agile certifications)",
+  "qualifications": "Professional qualifications/certifications with year if known (e.g., ACCA, CFA, ACA, CAIA, PRINCE2, Scrum Master, PMP, CTA, ATT, LPC, SQE, Bar admissions, FCA/compliance certs)",
   "profile": "FULL profile/summary paragraph exactly as written",
   "education": [
     {
@@ -471,7 +471,7 @@ OTHER RULES:
 - NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
 - "it_systems" should contain ANY software, systems, or tools mentioned in the CV (CRM, databases, financial platforms, Microsoft Office, etc.) - extract from skills sections, bullet points, or anywhere mentioned
 - If no IT/systems found, set "it_systems" to an empty string ""
-- "qualifications" should contain professional accreditations and certifications like ACCA, ACA, CFA, CAIA, FRM, CPA, PRINCE2, Scrum Master, MSP, PMP, Six Sigma, Agile certifications, etc. with year obtained if mentioned - these are separate from university degrees
+- "qualifications" should contain ALL professional accreditations and certifications with year if mentioned - this includes finance (ACCA, ACA, CFA, CAIA, FRM, CPA), tax (CTA, ATT), legal (LPC, SQE, Bar admissions, solicitor/barrister qualification), project management (PRINCE2, Scrum Master, PMP, Six Sigma, Agile), compliance/regulatory (FCA, CISI, IMC), and any other professional certifications - these are separate from university degrees
 - If no professional qualifications found, set "qualifications" to an empty string ""
 - "other_information" is OPTIONAL - only include if the CV has a section like Volunteering, Languages, Interests, etc. - do NOT include IT/systems or professional qualifications here
 - If no such section exists, set "other_information" to an empty array []
