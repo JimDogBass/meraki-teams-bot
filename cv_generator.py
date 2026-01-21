@@ -99,10 +99,15 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     add_section_header(doc, "PERSONAL DETAILS")
     add_blank_line(doc)
     add_field_line(doc, "Name", cv_data.get("name", ""))
-    add_field_line(doc, "Location", cv_data.get("location", ""))
-    add_field_line(doc, "Right to Work", cv_data.get("right_to_work", ""))
-    add_field_line(doc, "Notice", cv_data.get("notice", ""))
-    add_field_line(doc, "Salary expectations", cv_data.get("salary_expectations", ""))
+    # Only show these fields if they have values
+    if cv_data.get("location"):
+        add_field_line(doc, "Location", cv_data.get("location", ""))
+    if cv_data.get("right_to_work"):
+        add_field_line(doc, "Right to Work", cv_data.get("right_to_work", ""))
+    if cv_data.get("notice"):
+        add_field_line(doc, "Notice", cv_data.get("notice", ""))
+    if cv_data.get("salary_expectations"):
+        add_field_line(doc, "Salary expectations", cv_data.get("salary_expectations", ""))
 
     # === IT/SYSTEMS (always show, even if empty) ===
     add_blank_line(doc)
@@ -111,13 +116,6 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     label_run = p.add_run("IT/Systems: ")
     label_run.bold = True
     p.add_run(it_systems if it_systems else "N/A")
-
-    # === QUALIFICATIONS (always show, even if empty) ===
-    qualifications = cv_data.get("qualifications", "")
-    p = doc.add_paragraph()
-    label_run = p.add_run("Qualifications: ")
-    label_run.bold = True
-    p.add_run(qualifications if qualifications else "N/A")
 
     # === LANGUAGES (always show, even if empty) ===
     languages = cv_data.get("languages", "")
@@ -135,10 +133,26 @@ def create_meraki_cv(cv_data: dict) -> bytes:
 
     # === EDUCATION ===
     education = cv_data.get("education", [])
-    if education:
+    professional_qualifications = cv_data.get("professional_qualifications", [])
+
+    if education or professional_qualifications:
         add_blank_line(doc)
         add_section_header(doc, "EDUCATION")
         add_blank_line(doc)
+
+        # Professional Qualifications first (if any)
+        if professional_qualifications:
+            p = doc.add_paragraph()
+            label_run = p.add_run("Professional Qualifications:")
+            label_run.bold = True
+            for qual in professional_qualifications:
+                # Use en dash bullet for professional qualifications
+                qual_p = doc.add_paragraph()
+                qual_p.paragraph_format.left_indent = Cm(0.6)
+                qual_p.paragraph_format.first_line_indent = Cm(-0.4)
+                qual_p.add_run(f"−\t{qual}")
+            add_blank_line(doc)
+
         for i, edu in enumerate(education):
             dates = edu.get("dates", "")
             institution = edu.get("institution", "")
@@ -160,18 +174,6 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             if i < len(education) - 1:
                 add_blank_line(doc)
 
-    # === CANDIDATE PROFILE ===
-    add_blank_line(doc)
-    add_section_header(doc, "CANDIDATE PROFILE")
-    add_blank_line(doc)
-    profile = cv_data.get("profile", "")
-    if profile:
-        # Split profile into paragraphs if it contains double newlines
-        paragraphs = profile.split('\n\n') if '\n\n' in profile else [profile]
-        for para_text in paragraphs:
-            p = doc.add_paragraph(para_text.strip())
-            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-
     # === WORK EXPERIENCE ===
     work_exp = cv_data.get("work_experience", [])
     if work_exp:
@@ -190,11 +192,26 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             # Position line
             if position:
                 add_position_line(doc, position)
-                add_blank_line(doc)  # Space after position
 
-            # Bullet points (supports nested/hierarchical structure)
-            for bullet in job.get("bullets", []):
-                add_nested_bullets(doc, bullet)
+            # Work experience sections (sub-headers with content paragraphs)
+            sections = job.get("sections", [])
+            if sections:
+                for section in sections:
+                    header = section.get("header", "")
+                    content = section.get("content", [])
+
+                    # Add sub-header if present (bold text)
+                    if header:
+                        add_blank_line(doc)
+                        add_work_section_header(doc, header)
+
+                    # Add content paragraphs (plain text, no bullets)
+                    for para_text in content:
+                        add_work_content_paragraph(doc, para_text)
+            else:
+                # Fallback: handle old "bullets" format for backwards compatibility
+                for bullet in job.get("bullets", []):
+                    add_nested_bullets(doc, bullet)
 
             # Add blank line between jobs (except last)
             if i < len(work_exp) - 1:
@@ -349,6 +366,23 @@ def add_position_line(doc, position):
     return p
 
 
+def add_work_section_header(doc, header_text):
+    """Add a bold sub-header within work experience (e.g., 'Client Product Strategy & Bespoke Benchmark Design')."""
+    p = doc.add_paragraph()
+    run = p.add_run(header_text)
+    run.bold = True
+    run.font.name = 'Aptos'
+    run.font.size = Pt(11)
+    return p
+
+
+def add_work_content_paragraph(doc, text):
+    """Add a content paragraph within work experience (plain text, justified)."""
+    p = doc.add_paragraph(text)
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    return p
+
+
 def add_bullet_point(doc, text, level=0):
     """Add a bullet point line with proper hanging indent. Supports 4 levels."""
     p = doc.add_paragraph()
@@ -428,12 +462,11 @@ CV_EXTRACTION_PROMPT = """You are a CV data extraction assistant. Extract struct
 
 CRITICAL RULES:
 1. Return ONLY valid JSON - no explanations, no markdown code blocks, just the JSON object
-2. Keep the complete profile/summary exactly as written in the CV
-3. Use short date format: "Jan 23" not "January 2023"
-4. Extract ALL work experience entries
-5. Preserve ALL bullet points from each role
-6. Extract IT/Systems separately - do NOT include them in other_information
-7. Only include "other_information" for categories not covered by other fields (NOT IT/systems, qualifications, languages, or interests)
+2. Use short date format: "Jan 23" not "January 2023"
+3. Extract ALL work experience entries
+4. Preserve ALL content from each role
+5. Extract IT/Systems separately - do NOT include them in other_information
+6. Only include "other_information" for categories not covered by other fields
 
 REQUIRED JSON STRUCTURE:
 {
@@ -443,10 +476,14 @@ REQUIRED JSON STRUCTURE:
   "notice": "",
   "salary_expectations": "",
   "it_systems": "Comma-separated list of software, systems, tools (e.g., Salesforce, Backstop, Dealcloud, Excel, Bloomberg)",
-  "qualifications": "Professional qualifications/certifications with year if known (e.g., ACCA, CFA, ACA, CAIA, PRINCE2, Scrum Master, PMP, CTA, ATT, LPC, SQE, Bar admissions, FCA/compliance certs)",
+  "qualifications": "N/A",
   "languages": "Comma-separated list of languages with proficiency (e.g., English (native), French (proficient), Spanish (conversational))",
   "interests": "Comma-separated list of interests/hobbies (e.g., Travel, volunteering, contemporary art, basketball)",
-  "profile": "FULL profile/summary paragraph exactly as written",
+  "professional_qualifications": [
+    "CFA Level 2 Candidate (2026)",
+    "Quantamental Academy – Macrosynergy (2025)",
+    "Portfolio Risk Management (HEC Paris @ Coursera, 2023)"
+  ],
   "education": [
     {
       "dates": "2019",
@@ -460,22 +497,18 @@ REQUIRED JSON STRUCTURE:
       "dates": "Jan 23 - Present",
       "company": "Company Name",
       "position": "Job Title",
-      "bullets": [
-        "Simple bullet point as a string",
+      "sections": [
         {
-          "text": "Category or main point with sub-items",
-          "sub_bullets": [
-            "Second level item",
-            {
-              "text": "Second level item with its own sub-items",
-              "sub_bullets": [
-                "Third level item",
-                {
-                  "text": "Third level with fourth level below",
-                  "sub_bullets": ["Fourth level item 1", "Fourth level item 2"]
-                }
-              ]
-            }
+          "header": "Client Product Strategy & Bespoke Benchmark Design",
+          "content": [
+            "Acted as the lead product advisor for institutional clients...",
+            "Developed compelling index investment narratives..."
+          ]
+        },
+        {
+          "header": "Systematic Research & Portfolio Optimization",
+          "content": [
+            "Designed and implemented a Python-based backtesting framework..."
           ]
         }
       ]
@@ -500,24 +533,30 @@ REQUIRED JSON STRUCTURE:
   ]
 }
 
-IMPORTANT - HIERARCHICAL BULLETS:
-- CVs often have DEEPLY NESTED bullet structures (up to 4 levels)
-- Level 1: Main categories like "Business Analyst", "Responsibilities:"
-- Level 2: Sub-items like "Work with subject matter experts...", "Data mapping..."
-- Level 3: Lists under sub-items like "a) Securities", "b) Prices and FX Rates"
-- Level 4: Details under lists like "i. Benchmarks", "ii. Securities"
-- PRESERVE this hierarchy using nested "text" and "sub_bullets" objects
-- Look for indentation, letters (a, b, c), numbers (1, 2, 3), or roman numerals (i, ii, iii) as hierarchy indicators
-- If bullets are flat/simple with no sub-items, just use strings
+IMPORTANT - WORK EXPERIENCE SECTIONS:
+- Many CVs organize work experience with SUB-HEADERS followed by content paragraphs
+- Sub-headers are category titles like "Client Product Strategy & Bespoke Benchmark Design", "Systematic Research & Portfolio Optimization", "Business Partnership & Strategic Development"
+- These are NOT bullet points - they are section titles within a role
+- Use the "sections" array to capture this structure:
+  - "header": The sub-header title (will be rendered as bold text)
+  - "content": Array of paragraph strings that follow that header (will be rendered as plain text, NOT bullets)
+- If a role has NO sub-headers and just flat bullet points, use a single section with empty header: {"header": "", "content": ["bullet 1", "bullet 2"]}
+- PRESERVE the exact text of each content item
+
+PROFESSIONAL QUALIFICATIONS:
+- "professional_qualifications" is an ARRAY of strings for ALL certificates, courses, learning, professional development
+- This includes: CFA, ACCA, ACA, CAIA, PRINCE2, Scrum Master, PMP, Six Sigma, Coursera courses, company training, conference attendance, academies, etc.
+- Look for sections titled "Certificates", "Certifications", "Learning", "Professional Development", "Outreach", "Training"
+- Each item should be a complete string like "CFA Level 2 Candidate (2026)" or "Portfolio Risk Management (HEC Paris @ Coursera, 2023)"
+- If no professional qualifications found, set to empty array []
 
 OTHER RULES:
 - Extract ALL paid/professional roles from the CV as work_experience
 - Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved
-- Include ALL bullet points from each role
 - Preserve original wording exactly
 - NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
 - "it_systems" should contain ANY software, systems, or tools mentioned in the CV (CRM, databases, financial platforms, Microsoft Office, etc.) - extract from skills sections, bullet points, or anywhere mentioned. If no IT/systems found, set to empty string ""
-- "qualifications" should contain ALL professional accreditations and certifications with year if mentioned - this includes finance (ACCA, ACA, CFA, CAIA, FRM, CPA), tax (CTA, ATT), legal (LPC, SQE, Bar admissions, solicitor/barrister qualification), project management (PRINCE2, Scrum Master, PMP, Six Sigma, Agile), compliance/regulatory (FCA, CISI, IMC), and any other professional certifications - these are separate from university degrees. If no professional qualifications found, set to empty string ""
+- "qualifications" field is deprecated - always set to "N/A"
 - "languages" should contain ALL languages mentioned with proficiency level in parentheses (e.g., "English (native), French (proficient)"). If no languages found, set to empty string ""
 - "interests" should contain ALL hobbies/interests mentioned as a comma-separated list (e.g., "Travel, volunteering, contemporary art, basketball"). If no interests found, set to empty string ""
 - Education "details" should include ALL additional info: grades, GPA, honors, citations (e.g., "Citation in French"), leadership roles (e.g., "Leadership: President, Harvard College European Society"), test scores, etc.
