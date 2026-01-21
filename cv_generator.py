@@ -548,15 +548,19 @@ REQUIRED JSON STRUCTURE:
 
 IMPORTANT - WORK EXPERIENCE SECTIONS:
 - Many CVs organize work experience with SUB-HEADERS followed by bullet points
-- Sub-headers are category titles like "Client Product Strategy & Bespoke Benchmark Design", "Systematic Research & Portfolio Optimization", "Business Partnership & Strategic Development"
-- These sub-headers are NOT bullet points - they are section titles within a role
-- Use the "sections" array to capture this structure:
-  - "header": The sub-header title (will be rendered as bold text, no bullet)
-  - "content": Array of bullet point items that follow that header (will be rendered as bullet points)
+- Sub-headers are STANDALONE section titles like "Client Product Strategy & Bespoke Benchmark Design" that appear on their OWN line with bullet points BELOW them
+- Use the "sections" array ONLY when there are clear standalone section headers within a role
 - If a role has NO sub-headers and just flat bullet points, use a single section with empty header: {"header": "", "content": ["bullet 1", "bullet 2"]}
+
+CRITICAL - DO NOT SPLIT BULLET POINTS:
+- If a bullet point has "Label: content" format like "Strategic Leadership: Define and implement the overall business strategy...", this is ONE bullet point - keep it as ONE bullet point
+- DO NOT extract "Strategic Leadership" as a header and "Define and implement..." as a separate bullet
+- The ENTIRE text "Strategic Leadership: Define and implement the overall business strategy..." should be a SINGLE bullet point
+- Only use headers when they are STANDALONE lines in the original CV, not when they're part of a bullet point
+
 - PRESERVE the exact text of each content item
 - Content items can be simple strings OR nested objects with sub_bullets for hierarchical bullets:
-  - Simple: "Acted as the lead product advisor..."
+  - Simple: "Strategic Leadership: Define and implement the overall business strategy..."
   - Nested: {"text": "Main point", "sub_bullets": ["Sub point 1", "Sub point 2"]}
 
 CRITICAL - SUMMARY-STYLE CVs:
