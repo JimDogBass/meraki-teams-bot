@@ -193,21 +193,21 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             if position:
                 add_position_line(doc, position)
 
-            # Work experience sections (sub-headers with content paragraphs)
+            # Work experience sections (sub-headers with bullet points)
             sections = job.get("sections", [])
             if sections:
                 for section in sections:
                     header = section.get("header", "")
                     content = section.get("content", [])
 
-                    # Add sub-header if present (bold text)
+                    # Add sub-header if present (bold text, no bullet)
                     if header:
                         add_blank_line(doc)
                         add_work_section_header(doc, header)
 
-                    # Add content paragraphs (plain text, no bullets)
-                    for para_text in content:
-                        add_work_content_paragraph(doc, para_text)
+                    # Add content as bullet points (supports nested structure)
+                    for item in content:
+                        add_nested_bullets(doc, item)
             else:
                 # Fallback: handle old "bullets" format for backwards compatibility
                 for bullet in job.get("bullets", []):
@@ -534,14 +534,17 @@ REQUIRED JSON STRUCTURE:
 }
 
 IMPORTANT - WORK EXPERIENCE SECTIONS:
-- Many CVs organize work experience with SUB-HEADERS followed by content paragraphs
+- Many CVs organize work experience with SUB-HEADERS followed by bullet points
 - Sub-headers are category titles like "Client Product Strategy & Bespoke Benchmark Design", "Systematic Research & Portfolio Optimization", "Business Partnership & Strategic Development"
-- These are NOT bullet points - they are section titles within a role
+- These sub-headers are NOT bullet points - they are section titles within a role
 - Use the "sections" array to capture this structure:
-  - "header": The sub-header title (will be rendered as bold text)
-  - "content": Array of paragraph strings that follow that header (will be rendered as plain text, NOT bullets)
+  - "header": The sub-header title (will be rendered as bold text, no bullet)
+  - "content": Array of bullet point items that follow that header (will be rendered as bullet points)
 - If a role has NO sub-headers and just flat bullet points, use a single section with empty header: {"header": "", "content": ["bullet 1", "bullet 2"]}
 - PRESERVE the exact text of each content item
+- Content items can be simple strings OR nested objects with sub_bullets for hierarchical bullets:
+  - Simple: "Acted as the lead product advisor..."
+  - Nested: {"text": "Main point", "sub_bullets": ["Sub point 1", "Sub point 2"]}
 
 PROFESSIONAL QUALIFICATIONS:
 - "professional_qualifications" is an ARRAY of strings for ALL certificates, courses, learning, professional development
