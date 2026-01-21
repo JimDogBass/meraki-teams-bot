@@ -480,6 +480,8 @@ CRITICAL RULES:
 4. Preserve ALL content from each role
 5. Extract IT/Systems separately - do NOT include them in other_information
 6. Only include "other_information" for categories not covered by other fields
+7. NEVER FABRICATE OR HALLUCINATE CONTENT - only extract what is EXPLICITLY written in the CV. If information is not present, use empty string "" or empty array []. Do NOT invent volunteering, skills, experiences, or any other content.
+8. NEVER use "N/A" for any field - always use empty string "" instead
 
 REQUIRED JSON STRUCTURE:
 {
@@ -492,7 +494,7 @@ REQUIRED JSON STRUCTURE:
   "qualifications": "",
   "languages": "Comma-separated list of languages with proficiency (e.g., English (native), French (proficient), Spanish (conversational))",
   "interests": "Comma-separated list of interests/hobbies (e.g., Travel, volunteering, contemporary art, basketball)",
-  "profile": "The candidate's profile/summary/about section - their personal statement about themselves and career",
+  "profile": "The candidate's personal profile/summary/about section - a first-person statement about themselves (e.g., 'I am a qualified accountant with 10 years experience...'). NOT education descriptions, NOT study profiles, NOT key skills lists. If no personal statement exists, use empty string.",
   "professional_qualifications": [
     "CFA Level 2 Candidate (2026)",
     "Quantamental Academy – Macrosynergy (2025)",
@@ -586,16 +588,18 @@ CRITICAL - SUMMARY-STYLE CVs:
 
 PROFESSIONAL QUALIFICATIONS:
 - "professional_qualifications" is an ARRAY of strings for ALL certificates, courses, learning, professional development
-- This includes: CFA, ACCA, ACA, CAIA, PRINCE2, Scrum Master, PMP, Six Sigma, Coursera courses, company training, conference attendance, academies, etc.
-- Look for sections titled "Certificates", "Certifications", "Learning", "Professional Development", "Outreach", "Training"
-- Each item should be a complete string like "CFA Level 2 Candidate (2026)" or "Portfolio Risk Management (HEC Paris @ Coursera, 2023)"
+- This includes: CFA, ACCA, ACA, CAIA, PRINCE2, Scrum Master, PMP, Six Sigma, Coursera courses, company training, conference attendance, seminars, academies, etc.
+- Look for sections titled "Certificates", "Certifications", "Learning", "Professional Development", "Outreach", "Training", "Courses and Certificates", "Additional Information"
+- Extract ALL courses and certificates regardless of how old they are
+- Each item should be a complete string like "CFA Level 2 Candidate (2026)" or "Nexia International – European Manager training seminar (2007)"
 - If no professional qualifications found, set to empty array []
 
 OTHER RULES:
+- ABSOLUTELY NO HALLUCINATION: Only extract content that is EXPLICITLY written in the CV. Do NOT invent, fabricate, or assume ANY content. If you are unsure whether something exists in the CV, it probably doesn't - leave it out.
 - Extract ALL paid/professional roles from the CV as work_experience
-- Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved
-- Preserve original wording exactly
-- "profile" should contain the candidate's personal statement/summary/about section (e.g., "I am a qualified Chartered Accountant with 6 years of experience..."). This is their introduction paragraph, NOT their bullet point achievements. If no profile found, set to empty string ""
+- Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved - but ONLY if they actually exist in the CV
+- Preserve original wording exactly - do NOT paraphrase or add content
+- "profile" should contain the candidate's PERSONAL STATEMENT or ABOUT ME section - typically a paragraph written in first person (e.g., "I am a qualified Chartered Accountant...") or third person describing themselves. This is NOT: key skills lists, education study descriptions, course descriptions, or bullet point achievements. If no personal statement/profile/summary paragraph exists, set to empty string ""
 - NEVER use "N/A" for any field - use empty string "" instead
 - "location" should only contain city/country if explicitly stated. If not found, set to empty string ""
 - NEVER infer right_to_work from nationality, citizenship, visa status, or "eligible to work" statements. The right_to_work field must ONLY be filled if the CV has an EXPLICIT "Right to Work:" label. Otherwise set to empty string ""
@@ -604,7 +608,7 @@ OTHER RULES:
 - "qualifications" field is deprecated - always set to empty string ""
 - "languages" should contain ALL languages mentioned with proficiency level in parentheses (e.g., "English (native), French (proficient)"). If no languages found, set to empty string ""
 - "interests" should contain ALL hobbies/interests mentioned as a comma-separated list (e.g., "Travel, volunteering, contemporary art, basketball"). If no interests found, set to empty string ""
-- Education "details" should include ALL additional info: grades, GPA, honors, citations (e.g., "Citation in French"), leadership roles (e.g., "Leadership: President, Harvard College European Society"), test scores, etc.
+- Education "details" should include ALL additional info: grades, GPA, honors, citations (e.g., "Citation in French"), leadership roles (e.g., "Leadership: President, Harvard College European Society"), test scores, study profile descriptions (e.g., "Profile: Marketing and Management"), faculty info, thesis titles, etc. These belong in education details, NOT in the profile field.
 - "other_information" is for any remaining categories not covered above (e.g., Publications, Awards, Core Skills, Volunteer Work). Keep it SIMPLE - just output what comes in. Use "content": ["item1", "item2"] format with the ORIGINAL text. Do NOT restructure or over-engineer simple text into organization/role/bullets format. If the input says "Volunteering for Food for all to deliver meals to the vulnerable", output that EXACT text as a content item, don't split it into organization + role + bullet. If nothing else remains, set to empty array []
 
 Extract the CV data now:"""
