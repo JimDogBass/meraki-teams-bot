@@ -494,7 +494,7 @@ REQUIRED JSON STRUCTURE:
   "qualifications": "",
   "languages": "Comma-separated list of languages with proficiency (e.g., English (native), French (proficient), Spanish (conversational))",
   "interests": "Comma-separated list of interests/hobbies (e.g., Travel, volunteering, contemporary art, basketball)",
-  "profile": "The candidate's personal profile/summary/about section - a first-person statement about themselves (e.g., 'I am a qualified accountant with 10 years experience...'). NOT education descriptions, NOT study profiles, NOT key skills lists. If no personal statement exists, use empty string.",
+  "profile": "The candidate's personal profile/summary/about section - a dedicated paragraph about their career and professional background. NOT hobbies, NOT interests, NOT education descriptions, NOT key skills lists. Must be from a section explicitly labeled Profile/Summary/About. If no such section exists, use empty string.",
   "professional_qualifications": [
     "CFA Level 2 Candidate (2026)",
     "Quantamental Academy – Macrosynergy (2025)",
@@ -546,18 +546,20 @@ REQUIRED JSON STRUCTURE:
 }
 
 CRITICAL - TITLE PROGRESSIONS AT THE SAME COMPANY:
-- When a candidate has multiple titles/positions at the SAME company listed consecutively (e.g., promotions), this is ONE continuous role - NOT separate jobs
-- DO NOT create separate work_experience entries for each title at the same company
-- Combine into ONE entry with:
-  - dates: Full span from earliest start to latest end (e.g., "Feb 22 - Present")
-  - company: The company name
-  - position: All titles with dates, e.g., "Private Equity Associate (Sep 24 - Present), Senior Analyst (Oct 23 - Sep 24), Analyst (Feb 22 - Oct 23)"
-- The bullet points describe work across the ENTIRE tenure - include them only ONCE
-- Example: If CV shows:
+- This rule ONLY applies when the EXACT SAME company name appears with multiple titles listed together
+- DIFFERENT companies MUST be separate work_experience entries - NEVER merge different companies together
+- UBS, Credit Suisse, Goldman Sachs, etc. are DIFFERENT companies even if the person moved between them
+- Example of what to MERGE (same company, multiple titles listed together):
     "Lincolnshire Management
      Private Equity Associate                    September 2024 – Present
      Private Equity Analyst, Senior Analyst      February 2022 – September 2024"
-  This is ONE entry with dates "Feb 22 - Present", NOT two separate jobs
+  → ONE entry: dates "Feb 22 - Present", position shows all titles
+- Example of what to KEEP SEPARATE (different companies):
+    "UBS - Execution Only Trader (June 2025 - Present)
+     Credit Suisse - Multi-Asset Trader (May 2023 - June 2025)
+     Louis Capital Markets - Equity Trader (May 2018 - May 2023)"
+  → THREE separate entries, one for each company
+- When in doubt, keep jobs as SEPARATE entries
 
 IMPORTANT - WORK EXPERIENCE SECTIONS:
 - Many CVs organize work experience with SUB-HEADERS followed by bullet points
@@ -599,7 +601,7 @@ OTHER RULES:
 - Extract ALL paid/professional roles from the CV as work_experience
 - Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved - but ONLY if they actually exist in the CV
 - Preserve original wording exactly - do NOT paraphrase or add content
-- "profile" should contain the candidate's PERSONAL STATEMENT or ABOUT ME section - typically a paragraph written in first person (e.g., "I am a qualified Chartered Accountant...") or third person describing themselves. This is NOT: key skills lists, education study descriptions, course descriptions, or bullet point achievements. If no personal statement/profile/summary paragraph exists, set to empty string ""
+- "profile" should contain the candidate's PERSONAL STATEMENT or ABOUT ME section - typically a dedicated section labeled "Profile", "Summary", "About Me", or "Personal Statement". This is NOT: hobbies/interests text, key skills lists, education study descriptions, course descriptions, or bullet point achievements. Random sentences from hobbies (like "I am a keen golfer") are NOT profiles. If no dedicated profile/summary section exists, set to empty string ""
 - NEVER use "N/A" for any field - use empty string "" instead
 - "location" should only contain city/country if explicitly stated. If not found, set to empty string ""
 - NEVER infer right_to_work from nationality, citizenship, visa status, or "eligible to work" statements. The right_to_work field must ONLY be filled if the CV has an EXPLICIT "Right to Work:" label. Otherwise set to empty string ""
