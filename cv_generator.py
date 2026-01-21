@@ -174,6 +174,18 @@ def create_meraki_cv(cv_data: dict) -> bytes:
             if i < len(education) - 1:
                 add_blank_line(doc)
 
+    # === CANDIDATE PROFILE (if present) ===
+    profile = cv_data.get("profile", "")
+    if profile:
+        add_blank_line(doc)
+        add_section_header(doc, "CANDIDATE PROFILE")
+        add_blank_line(doc)
+        # Split profile into paragraphs if it contains double newlines
+        paragraphs = profile.split('\n\n') if '\n\n' in profile else [profile]
+        for para_text in paragraphs:
+            p = doc.add_paragraph(para_text.strip())
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
     # === WORK EXPERIENCE ===
     work_exp = cv_data.get("work_experience", [])
     if work_exp:
@@ -479,6 +491,7 @@ REQUIRED JSON STRUCTURE:
   "qualifications": "",
   "languages": "Comma-separated list of languages with proficiency (e.g., English (native), French (proficient), Spanish (conversational))",
   "interests": "Comma-separated list of interests/hobbies (e.g., Travel, volunteering, contemporary art, basketball)",
+  "profile": "The candidate's profile/summary/about section - their personal statement about themselves and career",
   "professional_qualifications": [
     "CFA Level 2 Candidate (2026)",
     "Quantamental Academy – Macrosynergy (2025)",
@@ -546,6 +559,16 @@ IMPORTANT - WORK EXPERIENCE SECTIONS:
   - Simple: "Acted as the lead product advisor..."
   - Nested: {"text": "Main point", "sub_bullets": ["Sub point 1", "Sub point 2"]}
 
+CRITICAL - SUMMARY-STYLE CVs:
+- Some CVs list ALL roles first (just dates, company, title) and THEN have a "Professional Highlights" or "Key Responsibilities" section with bullet points that describe experience ACROSS ALL roles
+- DO NOT put these summary bullets under just the first/current role!
+- If bullet points are clearly a SUMMARY of career experience (not specific to one role), distribute them appropriately:
+  - If bullets mention specific companies/roles, assign them to those roles
+  - If bullets are generic highlights that apply across roles, assign them to the MOST RECENT role that they're relevant to based on context
+  - Look for clues: "Worked with DWS in New York" → assign to the New York role; "Managed portfolio of internal audit" → assign based on where that work happened
+- Each role should have its OWN relevant bullets, not one role with everything and others empty
+- The "profile" field should contain the candidate's personal statement/summary paragraph, NOT the professional highlights bullets
+
 PROFESSIONAL QUALIFICATIONS:
 - "professional_qualifications" is an ARRAY of strings for ALL certificates, courses, learning, professional development
 - This includes: CFA, ACCA, ACA, CAIA, PRINCE2, Scrum Master, PMP, Six Sigma, Coursera courses, company training, conference attendance, academies, etc.
@@ -557,6 +580,7 @@ OTHER RULES:
 - Extract ALL paid/professional roles from the CV as work_experience
 - Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved
 - Preserve original wording exactly
+- "profile" should contain the candidate's personal statement/summary/about section (e.g., "I am a qualified Chartered Accountant with 6 years of experience..."). This is their introduction paragraph, NOT their bullet point achievements. If no profile found, set to empty string ""
 - NEVER use "N/A" for any field - use empty string "" instead
 - "location" should only contain city/country if explicitly stated. If not found, set to empty string ""
 - NEVER infer right_to_work from nationality, citizenship, visa status, or "eligible to work" statements. The right_to_work field must ONLY be filled if the CV has an EXPLICIT "Right to Work:" label. Otherwise set to empty string ""
