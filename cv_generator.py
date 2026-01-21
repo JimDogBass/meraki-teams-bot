@@ -104,23 +104,34 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     add_field_line(doc, "Notice", cv_data.get("notice", ""))
     add_field_line(doc, "Salary expectations", cv_data.get("salary_expectations", ""))
 
-    # === IT/SYSTEMS (inline after personal details) ===
+    # === IT/SYSTEMS (always show, even if empty) ===
+    add_blank_line(doc)
     it_systems = cv_data.get("it_systems", "")
-    if it_systems:
-        add_blank_line(doc)
-        p = doc.add_paragraph()
-        label_run = p.add_run("IT/Systems: ")
-        label_run.bold = True
-        p.add_run(it_systems)
+    p = doc.add_paragraph()
+    label_run = p.add_run("IT/Systems: ")
+    label_run.bold = True
+    p.add_run(it_systems if it_systems else "N/A")
 
-    # === QUALIFICATIONS (inline after IT/Systems) ===
+    # === QUALIFICATIONS (always show, even if empty) ===
     qualifications = cv_data.get("qualifications", "")
-    if qualifications:
-        add_blank_line(doc)
-        p = doc.add_paragraph()
-        label_run = p.add_run("Qualifications: ")
-        label_run.bold = True
-        p.add_run(qualifications)
+    p = doc.add_paragraph()
+    label_run = p.add_run("Qualifications: ")
+    label_run.bold = True
+    p.add_run(qualifications if qualifications else "N/A")
+
+    # === LANGUAGES (always show, even if empty) ===
+    languages = cv_data.get("languages", "")
+    p = doc.add_paragraph()
+    label_run = p.add_run("Languages: ")
+    label_run.bold = True
+    p.add_run(languages if languages else "N/A")
+
+    # === INTERESTS (always show, even if empty) ===
+    interests = cv_data.get("interests", "")
+    p = doc.add_paragraph()
+    label_run = p.add_run("Interests: ")
+    label_run.bold = True
+    p.add_run(interests if interests else "N/A")
 
     # === EDUCATION ===
     education = cv_data.get("education", [])
@@ -195,28 +206,50 @@ def create_meraki_cv(cv_data: dict) -> bytes:
         add_blank_line(doc)
         add_section_header(doc, "OTHER INFORMATION")
         add_blank_line(doc)
-        for i, item in enumerate(other_info):
+        for item in other_info:
             category = item.get("category", "")
             content = item.get("content", [])
+            entries = item.get("entries", [])
 
-            if category:
-                # Add category as sub-header
+            if entries:
+                # Detailed entries (e.g., Non-Profit Boards, Volunteer Work)
+                # Add category header
                 p = doc.add_paragraph()
-                run = p.add_run(category + ":")
-                run.bold = True
-                run.font.name = 'Aptos'
-                run.font.size = Pt(11)
+                label_run = p.add_run(category)
+                label_run.bold = True
+                label_run.underline = True
 
-            # Add content items
-            if isinstance(content, list) and len(content) > 0:
-                p = doc.add_paragraph()
-                p.add_run('\n'.join(content))
-            elif content:
-                p = doc.add_paragraph(str(content))
+                for entry in entries:
+                    org = entry.get("organization", "")
+                    dates = entry.get("dates", "")
+                    role = entry.get("role", "")
+                    bullets = entry.get("bullets", [])
 
-            # Add space between categories (except last)
-            if i < len(other_info) - 1:
+                    # Organization and dates line (bold)
+                    if org or dates:
+                        add_tabbed_line(doc, dates, org, bold=True)
+
+                    # Role on next line (indented)
+                    if role:
+                        add_indented_line(doc, role)
+
+                    # Bullet points
+                    for bullet in bullets:
+                        add_nested_bullets(doc, bullet)
+
                 add_blank_line(doc)
+            elif content:
+                # Simple content - format like IT/Systems: bold label, comma-separated
+                p = doc.add_paragraph()
+                if category:
+                    label_run = p.add_run(category + ": ")
+                    label_run.bold = True
+
+                # Join content as comma-separated if it's a list
+                if isinstance(content, list) and len(content) > 0:
+                    p.add_run(", ".join(content))
+                else:
+                    p.add_run(str(content))
 
     # Save to bytes
     buffer = io.BytesIO()
@@ -400,7 +433,7 @@ CRITICAL RULES:
 4. Extract ALL work experience entries
 5. Preserve ALL bullet points from each role
 6. Extract IT/Systems separately - do NOT include them in other_information
-7. Only include "other_information" if explicitly present in the CV (volunteering, certifications, languages, etc.) - NOT IT/systems
+7. Only include "other_information" for categories not covered by other fields (NOT IT/systems, qualifications, languages, or interests)
 
 REQUIRED JSON STRUCTURE:
 {
@@ -411,13 +444,15 @@ REQUIRED JSON STRUCTURE:
   "salary_expectations": "",
   "it_systems": "Comma-separated list of software, systems, tools (e.g., Salesforce, Backstop, Dealcloud, Excel, Bloomberg)",
   "qualifications": "Professional qualifications/certifications with year if known (e.g., ACCA, CFA, ACA, CAIA, PRINCE2, Scrum Master, PMP, CTA, ATT, LPC, SQE, Bar admissions, FCA/compliance certs)",
+  "languages": "Comma-separated list of languages with proficiency (e.g., English (native), French (proficient), Spanish (conversational))",
+  "interests": "Comma-separated list of interests/hobbies (e.g., Travel, volunteering, contemporary art, basketball)",
   "profile": "FULL profile/summary paragraph exactly as written",
   "education": [
     {
       "dates": "2019",
       "title": "Degree/Qualification name",
       "institution": "University/School name",
-      "details": ["Additional details like grades if present"]
+      "details": ["Additional details like grades, citations, leadership roles, honors if present"]
     }
   ],
   "work_experience": [
@@ -450,6 +485,17 @@ REQUIRED JSON STRUCTURE:
     {
       "category": "Core Skills",
       "content": ["Skill 1", "Skill 2", "Skill 3"]
+    },
+    {
+      "category": "Non-Profit Boards",
+      "entries": [
+        {
+          "organization": "City Harvest, New York, NY",
+          "dates": "Nov 20 - Present",
+          "role": "Generation Harvest",
+          "bullets": ["Member of a group of ~30 young professional board members tasked with raising awareness..."]
+        }
+      ]
     }
   ]
 }
@@ -465,15 +511,16 @@ IMPORTANT - HIERARCHICAL BULLETS:
 - If bullets are flat/simple with no sub-items, just use strings
 
 OTHER RULES:
-- Extract ALL roles from the CV
+- Extract ALL paid/professional roles from the CV as work_experience
+- Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved
 - Include ALL bullet points from each role
 - Preserve original wording exactly
 - NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
-- "it_systems" should contain ANY software, systems, or tools mentioned in the CV (CRM, databases, financial platforms, Microsoft Office, etc.) - extract from skills sections, bullet points, or anywhere mentioned
-- If no IT/systems found, set "it_systems" to an empty string ""
-- "qualifications" should contain ALL professional accreditations and certifications with year if mentioned - this includes finance (ACCA, ACA, CFA, CAIA, FRM, CPA), tax (CTA, ATT), legal (LPC, SQE, Bar admissions, solicitor/barrister qualification), project management (PRINCE2, Scrum Master, PMP, Six Sigma, Agile), compliance/regulatory (FCA, CISI, IMC), and any other professional certifications - these are separate from university degrees
-- If no professional qualifications found, set "qualifications" to an empty string ""
-- "other_information" is OPTIONAL - only include if the CV has a section like Volunteering, Languages, Interests, etc. - do NOT include IT/systems or professional qualifications here
-- If no such section exists, set "other_information" to an empty array []
+- "it_systems" should contain ANY software, systems, or tools mentioned in the CV (CRM, databases, financial platforms, Microsoft Office, etc.) - extract from skills sections, bullet points, or anywhere mentioned. If no IT/systems found, set to empty string ""
+- "qualifications" should contain ALL professional accreditations and certifications with year if mentioned - this includes finance (ACCA, ACA, CFA, CAIA, FRM, CPA), tax (CTA, ATT), legal (LPC, SQE, Bar admissions, solicitor/barrister qualification), project management (PRINCE2, Scrum Master, PMP, Six Sigma, Agile), compliance/regulatory (FCA, CISI, IMC), and any other professional certifications - these are separate from university degrees. If no professional qualifications found, set to empty string ""
+- "languages" should contain ALL languages mentioned with proficiency level in parentheses (e.g., "English (native), French (proficient)"). If no languages found, set to empty string ""
+- "interests" should contain ALL hobbies/interests mentioned as a comma-separated list (e.g., "Travel, volunteering, contemporary art, basketball"). If no interests found, set to empty string ""
+- Education "details" should include ALL additional info: grades, GPA, honors, citations (e.g., "Citation in French"), leadership roles (e.g., "Leadership: President, Harvard College European Society"), test scores, etc.
+- "other_information" is for any remaining categories not covered above (e.g., Publications, Awards, Core Skills that aren't IT systems, Non-Profit Boards, Volunteer Work). For simple lists use "content": ["item1", "item2"]. For detailed entries like Non-Profit Boards use "entries" array with organization, dates, role, and bullets. If nothing else remains, set to empty array []
 
 Extract the CV data now:"""
