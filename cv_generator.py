@@ -543,6 +543,20 @@ REQUIRED JSON STRUCTURE:
   ]
 }
 
+CRITICAL - TITLE PROGRESSIONS AT THE SAME COMPANY:
+- When a candidate has multiple titles/positions at the SAME company listed consecutively (e.g., promotions), this is ONE continuous role - NOT separate jobs
+- DO NOT create separate work_experience entries for each title at the same company
+- Combine into ONE entry with:
+  - dates: Full span from earliest start to latest end (e.g., "Feb 22 - Present")
+  - company: The company name
+  - position: All titles with dates, e.g., "Private Equity Associate (Sep 24 - Present), Senior Analyst (Oct 23 - Sep 24), Analyst (Feb 22 - Oct 23)"
+- The bullet points describe work across the ENTIRE tenure - include them only ONCE
+- Example: If CV shows:
+    "Lincolnshire Management
+     Private Equity Associate                    September 2024 – Present
+     Private Equity Analyst, Senior Analyst      February 2022 – September 2024"
+  This is ONE entry with dates "Feb 22 - Present", NOT two separate jobs
+
 IMPORTANT - WORK EXPERIENCE SECTIONS:
 - Many CVs organize work experience with SUB-HEADERS followed by bullet points
 - Sub-headers are STANDALONE section titles like "Client Product Strategy & Bespoke Benchmark Design" that appear on their OWN line with bullet points BELOW them
