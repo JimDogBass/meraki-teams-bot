@@ -476,7 +476,7 @@ REQUIRED JSON STRUCTURE:
   "notice": "",
   "salary_expectations": "",
   "it_systems": "Comma-separated list of software, systems, tools (e.g., Salesforce, Backstop, Dealcloud, Excel, Bloomberg)",
-  "qualifications": "N/A",
+  "qualifications": "",
   "languages": "Comma-separated list of languages with proficiency (e.g., English (native), French (proficient), Spanish (conversational))",
   "interests": "Comma-separated list of interests/hobbies (e.g., Travel, volunteering, contemporary art, basketball)",
   "professional_qualifications": [
@@ -554,9 +554,12 @@ OTHER RULES:
 - Extract ALL paid/professional roles from the CV as work_experience
 - Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved
 - Preserve original wording exactly
-- NEVER infer or guess right_to_work, notice, or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated in the CV
+- NEVER use "N/A" for any field - use empty string "" instead
+- "location" should only contain city/country if explicitly stated. If not found, set to empty string ""
+- NEVER infer right_to_work from nationality, citizenship, visa status, or "eligible to work" statements. The right_to_work field must ONLY be filled if the CV has an EXPLICIT "Right to Work:" label. Otherwise set to empty string ""
+- NEVER infer or guess notice or salary_expectations - ALWAYS leave these as empty strings "" unless EXPLICITLY stated with those exact labels in the CV
 - "it_systems" should contain ANY software, systems, or tools mentioned in the CV (CRM, databases, financial platforms, Microsoft Office, etc.) - extract from skills sections, bullet points, or anywhere mentioned. If no IT/systems found, set to empty string ""
-- "qualifications" field is deprecated - always set to "N/A"
+- "qualifications" field is deprecated - always set to empty string ""
 - "languages" should contain ALL languages mentioned with proficiency level in parentheses (e.g., "English (native), French (proficient)"). If no languages found, set to empty string ""
 - "interests" should contain ALL hobbies/interests mentioned as a comma-separated list (e.g., "Travel, volunteering, contemporary art, basketball"). If no interests found, set to empty string ""
 - Education "details" should include ALL additional info: grades, GPA, honors, citations (e.g., "Citation in French"), leadership roles (e.g., "Leadership: President, Harvard College European Society"), test scores, etc.
