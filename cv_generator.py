@@ -268,15 +268,16 @@ def create_meraki_cv(cv_data: dict) -> bytes:
 
                 add_blank_line(doc)
             elif content:
-                # Simple content - format like IT/Systems: bold label, comma-separated
+                # Simple content - category header then each item on its own line
                 p = doc.add_paragraph()
                 if category:
-                    label_run = p.add_run(category + ": ")
+                    label_run = p.add_run(category + ":")
                     label_run.bold = True
 
-                # Join content as comma-separated if it's a list
+                # Each content item as a separate line
                 if isinstance(content, list) and len(content) > 0:
-                    p.add_run(", ".join(content))
+                    for content_item in content:
+                        item_p = doc.add_paragraph(content_item)
                 else:
                     p.add_run(str(content))
 
@@ -533,14 +534,10 @@ REQUIRED JSON STRUCTURE:
       "content": ["Skill 1", "Skill 2", "Skill 3"]
     },
     {
-      "category": "Non-Profit Boards",
-      "entries": [
-        {
-          "organization": "City Harvest, New York, NY",
-          "dates": "Nov 20 - Present",
-          "role": "Generation Harvest",
-          "bullets": ["Member of a group of ~30 young professional board members tasked with raising awareness..."]
-        }
+      "category": "Volunteering",
+      "content": [
+        "Volunteering for Food for all to deliver meals to the vulnerable",
+        "Volunteering for the LTA - umpiring tennis matches for the visually impaired"
       ]
     }
   ]
@@ -594,6 +591,6 @@ OTHER RULES:
 - "languages" should contain ALL languages mentioned with proficiency level in parentheses (e.g., "English (native), French (proficient)"). If no languages found, set to empty string ""
 - "interests" should contain ALL hobbies/interests mentioned as a comma-separated list (e.g., "Travel, volunteering, contemporary art, basketball"). If no interests found, set to empty string ""
 - Education "details" should include ALL additional info: grades, GPA, honors, citations (e.g., "Citation in French"), leadership roles (e.g., "Leadership: President, Harvard College European Society"), test scores, etc.
-- "other_information" is for any remaining categories not covered above (e.g., Publications, Awards, Core Skills that aren't IT systems, Non-Profit Boards, Volunteer Work). For simple lists use "content": ["item1", "item2"]. For detailed entries like Non-Profit Boards use "entries" array with organization, dates, role, and bullets. If nothing else remains, set to empty array []
+- "other_information" is for any remaining categories not covered above (e.g., Publications, Awards, Core Skills, Volunteer Work). Keep it SIMPLE - just output what comes in. Use "content": ["item1", "item2"] format with the ORIGINAL text. Do NOT restructure or over-engineer simple text into organization/role/bullets format. If the input says "Volunteering for Food for all to deliver meals to the vulnerable", output that EXACT text as a content item, don't split it into organization + role + bullet. If nothing else remains, set to empty array []
 
 Extract the CV data now:"""
