@@ -324,7 +324,7 @@ def is_reformat_trigger(text: str) -> bool:
     return any(trigger in words or text_lower.startswith(trigger) for trigger in triggers)
 
 
-async def process_cv_reformat(cv_text: str, turn_context: TurnContext):
+async def process_cv_reformat(cv_text: str, turn_context: TurnContext, show_start_new: bool = True, source_filename: str = None):
     """Process CV text and generate reformatted Word document with alternative profile."""
     try:
         # Step 1: Extract structured CV data using OpenAI
@@ -381,21 +381,62 @@ async def process_cv_reformat(cv_text: str, turn_context: TurnContext):
             if alternative_profile:
                 response_text += f"\n\n**Alternative Candidate Profile:**\n{alternative_profile}"
 
-            # Send output with Start New button
-            start_new_card = create_start_new_card()
-            reply = Activity(
-                type="message",
-                text=response_text,
-                attachments=[start_new_card]
-            )
-            await turn_context.send_activity(reply)
+            # Send output (with Start New button only if requested)
+            if show_start_new:
+                start_new_card = create_start_new_card()
+                reply = Activity(
+                    type="message",
+                    text=response_text,
+                    attachments=[start_new_card]
+                )
+                await turn_context.send_activity(reply)
+            else:
+                await turn_context.send_activity(response_text)
         else:
             await turn_context.send_activity("Error: Storage not configured for file uploads")
 
     except ValueError as e:
-        await turn_context.send_activity(f"Error parsing CV data: {str(e)}")
+        error_msg = f"Error parsing CV data: {str(e)}"
+        if source_filename:
+            error_msg = f"Error processing **{source_filename}**: {str(e)}"
+        await turn_context.send_activity(error_msg)
     except Exception as e:
-        await turn_context.send_activity(f"Error generating Word document: {str(e)}")
+        error_msg = f"Error generating Word document: {str(e)}"
+        if source_filename:
+            error_msg = f"Error processing **{source_filename}**: {str(e)}"
+        await turn_context.send_activity(error_msg)
+
+
+async def process_multiple_cvs(cv_files: list, turn_context: TurnContext):
+    """
+    Process multiple CV files separately.
+    cv_files: list of tuples [(filename, extracted_text), ...]
+    """
+    total = len(cv_files)
+
+    if total > 1:
+        await turn_context.send_activity(f"Processing {total} CVs...")
+
+    for i, (filename, cv_text) in enumerate(cv_files):
+        is_last = (i == total - 1)
+
+        if total > 1:
+            await turn_context.send_activity(f"**Processing CV {i + 1} of {total}:** {filename}")
+
+        # For single file: show Start New button after processing
+        # For multiple files: don't show button until final summary
+        show_button = is_last and total == 1
+        await process_cv_reformat(cv_text, turn_context, show_start_new=show_button, source_filename=filename)
+
+    if total > 1:
+        # Show final summary with Start New button
+        start_new_card = create_start_new_card()
+        reply = Activity(
+            type="message",
+            text=f"Finished processing {total} CVs.",
+            attachments=[start_new_card]
+        )
+        await turn_context.send_activity(reply)
 
 
 async def on_turn(turn_context: TurnContext):
@@ -435,70 +476,78 @@ async def on_turn(turn_context: TurnContext):
             await turn_context.send_activity(reply)
             return
 
-        # Extract text from any file attachments
-        attachment_texts = []
+        # Extract text from any file attachments (keep separate for multi-CV support)
+        cv_files = []  # List of (filename, extracted_text) tuples
+        extraction_errors = []
         for attachment in attachments:
             if attachment.content_type and attachment.content_type.startswith('image/'):
                 continue
+            name = attachment.name or "unknown"
+            if not name and isinstance(attachment.content, dict):
+                name = attachment.content.get("name", "unknown")
             extracted = await extract_text_from_attachment(attachment, turn_context)
             if extracted and not extracted.startswith('['):
-                attachment_texts.append(f"--- Content from {attachment.name} ---\n{extracted}")
+                cv_files.append((name, extracted))
             elif extracted.startswith('['):
-                attachment_texts.append(extracted)
+                extraction_errors.append(extracted)
 
-        # Combine user text with extracted file content
-        combined_input = user_text
-        if attachment_texts:
-            file_content = "\n\n".join(attachment_texts)
-            if user_text:
-                combined_input = f"{user_text}\n\n{file_content}"
-            else:
-                combined_input = file_content
+        # Check if we have any valid content (files or text)
+        has_valid_files = len(cv_files) > 0
+        has_text = bool(user_text.strip())
 
         # 3. Handle "Reformat CV" button press with no content
         if card_data and card_data.get("action") == "reformat_cv":
-            if not combined_input.strip() or combined_input.startswith('['):
+            if not has_valid_files and not has_text:
                 set_pending_reformat(conversation_id)
-                await turn_context.send_activity("Great! Send me the CV - you can paste text or upload a PDF/Word file.")
+                await turn_context.send_activity("Great! Send me the CV(s) - you can paste text or upload PDF/Word files.")
                 return
             else:
                 # Button pressed with content attached - process immediately
                 clear_pending_reformat(conversation_id)
-                await process_cv_reformat(combined_input, turn_context)
+                if has_valid_files:
+                    await process_multiple_cvs(cv_files, turn_context)
+                else:
+                    await process_cv_reformat(user_text, turn_context)
                 return
 
         # 4. Check for pending reformat state with content
-        if get_pending_reformat(conversation_id) and combined_input and not combined_input.startswith('['):
+        if get_pending_reformat(conversation_id) and (has_valid_files or has_text):
             clear_pending_reformat(conversation_id)
-            await process_cv_reformat(combined_input, turn_context)
+            if has_valid_files:
+                await process_multiple_cvs(cv_files, turn_context)
+            else:
+                await process_cv_reformat(user_text, turn_context)
             return
 
         # 5. Check for reformat trigger words in message
         if is_reformat_trigger(user_text):
-            # Remove trigger word from content if it's a prefix
-            content_to_process = combined_input
-            if content_to_process and not attachment_texts:
-                # Strip trigger from beginning if present
+            if has_valid_files:
+                # Files attached with trigger word
+                await process_multiple_cvs(cv_files, turn_context)
+                return
+            elif has_text:
+                # Text pasted with trigger word - strip trigger from beginning if present
+                content_to_process = user_text
                 words = content_to_process.split(None, 1)
                 if len(words) > 1 and is_reformat_trigger(words[0]):
                     content_to_process = words[1]
-
-            if content_to_process and not content_to_process.startswith('['):
-                await process_cv_reformat(content_to_process, turn_context)
-                return
-            else:
-                set_pending_reformat(conversation_id)
-                await turn_context.send_activity("Send me the CV to reformat - paste text or upload a PDF/Word file.")
-                return
+                if content_to_process.strip():
+                    await process_cv_reformat(content_to_process, turn_context)
+                    return
+            # No content, set pending state
+            set_pending_reformat(conversation_id)
+            await turn_context.send_activity("Send me the CV(s) to reformat - paste text or upload PDF/Word files.")
+            return
 
         # 6. File attached with no explicit trigger -> assume reformat
-        if attachment_texts and not combined_input.startswith('['):
-            await process_cv_reformat(combined_input, turn_context)
+        if has_valid_files:
+            await process_multiple_cvs(cv_files, turn_context)
             return
 
         # 7. Handle extraction errors
-        if combined_input.startswith('['):
-            await turn_context.send_activity(combined_input)
+        if extraction_errors:
+            for error in extraction_errors:
+                await turn_context.send_activity(error)
             return
 
         # 8. Fallback -> show help card
