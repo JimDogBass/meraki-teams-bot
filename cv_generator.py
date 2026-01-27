@@ -99,15 +99,11 @@ def create_meraki_cv(cv_data: dict) -> bytes:
     add_section_header(doc, "PERSONAL DETAILS")
     add_blank_line(doc)
     add_field_line(doc, "Name", cv_data.get("name", ""))
-    # Only show these fields if they have values
-    if cv_data.get("location"):
-        add_field_line(doc, "Location", cv_data.get("location", ""))
-    if cv_data.get("right_to_work"):
-        add_field_line(doc, "Right to Work", cv_data.get("right_to_work", ""))
-    if cv_data.get("notice"):
-        add_field_line(doc, "Notice", cv_data.get("notice", ""))
-    if cv_data.get("salary_expectations"):
-        add_field_line(doc, "Salary expectations", cv_data.get("salary_expectations", ""))
+    # Always show all personal details fields (even if empty, so consultant can fill in)
+    add_field_line(doc, "Location", cv_data.get("location", ""))
+    add_field_line(doc, "Right to Work", cv_data.get("right_to_work", ""))
+    add_field_line(doc, "Notice", cv_data.get("notice", ""))
+    add_field_line(doc, "Salary expectations", cv_data.get("salary_expectations", ""))
 
     # === IT/SYSTEMS (always show, even if empty) ===
     add_blank_line(doc)
