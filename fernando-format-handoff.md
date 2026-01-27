@@ -14,6 +14,7 @@ The bot reformats CVs and generates alternative candidate profiles.
 - Bot appears in Teams as **"Fernando Format"**
 - Responds to messages using Azure OpenAI (gpt-4o-mini)
 - **PDF and Word file upload** - extracts text automatically (.pdf, .docx, .doc)
+- **Multiple CV support** - upload multiple files at once, each processed separately
 - **CV Reformat** - generates branded Word documents with Meraki logo
 - **Alternative Candidate Profile** - generates 2-3 sentence summary alongside CV
 - **Simple Adaptive Card menu** - single "Reformat CV" button
@@ -84,21 +85,22 @@ C:\Projects\fernando-format\
 
 | Feature | Description |
 |---------|-------------|
-| **Input** | PDF, Word (.docx, .doc), or pasted CV text |
-| **Output 1** | Meraki-branded Word document (download link) |
-| **Output 2** | Alternative Candidate Profile (2-3 sentences in chat) |
+| **Input** | PDF, Word (.docx, .doc), or pasted CV text. Supports multiple files at once. |
+| **Output 1** | Meraki-branded Word document (download link) per CV |
+| **Output 2** | Alternative Candidate Profile (2-3 sentences in chat) per CV |
 
 ### How to Use
 
 Users can trigger CV reformat in multiple ways:
-- **Button click:** Click "Reformat CV" button, then upload file
-- **Direct upload:** Just upload a PDF/Word CV file (assumes reformat)
+- **Button click:** Click "Reformat CV" button, then upload file(s)
+- **Direct upload:** Just upload PDF/Word CV file(s) (assumes reformat)
+- **Multiple files:** Upload multiple CVs at once - each is processed separately
 - **Trigger word:** Type "reformat" or "format" followed by content
 - **Prefix:** `/reformat` or `!reformat`
 
 ### Output Format
 
-After processing, the bot returns:
+**Single CV:** After processing, the bot returns:
 ```
 Here's the reformatted CV for **{Candidate Name}**:
 
@@ -110,6 +112,26 @@ _Link expires in 7 days_
 {2-3 sentence punchy summary using they/their pronouns}
 ```
 
+**Multiple CVs:** When processing multiple files:
+```
+Processing 3 CVs...
+
+**Processing CV 1 of 3:** candidate1.pdf
+Here's the reformatted CV for **{Name}**:
+[Download link + Alternative Profile]
+
+**Processing CV 2 of 3:** candidate2.docx
+Here's the reformatted CV for **{Name}**:
+[Download link + Alternative Profile]
+
+**Processing CV 3 of 3:** candidate3.pdf
+Here's the reformatted CV for **{Name}**:
+[Download link + Alternative Profile]
+
+Finished processing 3 CVs.
+[Start New button]
+```
+
 ---
 
 ## Message Flow
@@ -117,15 +139,15 @@ _Link expires in 7 days_
 ```
 User says "hi"/"help" → Show simple card with "Reformat CV" button
          ↓
-User clicks "Reformat CV" → "Great! Send me the CV..."
+User clicks "Reformat CV" → "Great! Send me the CV(s)..."
          ↓
-User uploads CV file → Process CV → Return Word doc + Alternative Profile
+User uploads CV file(s) → Process each CV separately → Return Word doc + Alternative Profile for each
          ↓
-Show "Start New" button
+Show "Start New" button (after all CVs processed)
 
 OR
 
-User uploads file directly → Assume reformat → Process CV
+User uploads file(s) directly → Assume reformat → Process each CV separately
 ```
 
 ---
@@ -216,6 +238,23 @@ The following features were removed when stripping down to Fernando Format:
 
 ## New Features Added
 
+### Multiple CV Support
+Users can upload multiple CV files at once. Each CV is processed separately and independently:
+- Progress updates: "Processing CV 1 of 3: filename.pdf"
+- Each CV gets its own Word document and Alternative Profile
+- If one CV fails, the others continue processing
+- Final summary: "Finished processing 3 CVs."
+
+### Personal Details Always Visible
+The following fields always appear in the Personal Details section of the output CV, even if empty:
+- Name
+- Location
+- Right to Work
+- Notice
+- Salary expectations
+
+This allows consultants to fill in missing information directly in the Word document.
+
 ### Alternative Candidate Profile
 After generating the reformatted CV, Fernando also generates a short "Alternative Candidate Profile" using a second OpenAI call.
 
@@ -251,3 +290,5 @@ This profile appears in the chat message below the download link, ready to copy/
 | Jan 2025 | Original "Jimmy Content" bot with 7 roles |
 | Jan 2025 | Stripped down to "Fernando Format" - CV reformat only |
 | Jan 2025 | Added Alternative Candidate Profile feature |
+| Jan 2025 | Personal details fields always show (even if empty) for consultant editing |
+| Jan 2025 | Multiple CV support - upload multiple files, each processed separately |
