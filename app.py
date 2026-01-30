@@ -492,7 +492,19 @@ async def on_turn(turn_context: TurnContext):
         cv_files = []  # List of (filename, extracted_text) tuples
         extraction_errors = []
         for attachment in attachments:
+            # Skip image attachments
             if attachment.content_type and attachment.content_type.startswith('image/'):
+                continue
+            # Skip empty HTML attachments (Teams sends these for formatting)
+            if attachment.content_type == 'text/html':
+                continue
+            # Skip attachments with no download URL available
+            has_download_url = (
+                attachment.content_url or
+                (isinstance(attachment.content, dict) and attachment.content.get('downloadUrl'))
+            )
+            if not has_download_url:
+                print(f"[DEBUG] Skipping attachment with no download URL: {attachment.content_type}")
                 continue
             name = attachment.name or "unknown"
             if not name and isinstance(attachment.content, dict):
