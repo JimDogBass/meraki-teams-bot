@@ -201,6 +201,13 @@ async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
     """Download attachment from Teams."""
     download_url = None
 
+    # Debug: Log full attachment structure
+    print(f"[DEBUG] Attachment content_type: {attachment.content_type}")
+    print(f"[DEBUG] Attachment content_url: {attachment.content_url}")
+    print(f"[DEBUG] Attachment name: {attachment.name}")
+    print(f"[DEBUG] Attachment content type: {type(attachment.content)}")
+    print(f"[DEBUG] Attachment content: {attachment.content}")
+
     if attachment.content_type == "application/vnd.microsoft.teams.file.download.info":
         if isinstance(attachment.content, dict) and "downloadUrl" in attachment.content:
             download_url = attachment.content["downloadUrl"]
@@ -208,8 +215,13 @@ async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
     if not download_url and attachment.content_url:
         download_url = attachment.content_url
 
+    # Also check for download URL in content dict regardless of content_type
+    if not download_url and isinstance(attachment.content, dict):
+        download_url = attachment.content.get("downloadUrl") or attachment.content.get("download_url")
+        print(f"[DEBUG] Tried content dict fallback, got: {download_url}")
+
     if not download_url:
-        raise ValueError("No download URL found in attachment")
+        raise ValueError(f"No download URL found in attachment. content_type={attachment.content_type}, content={attachment.content}")
 
     async with httpx.AsyncClient() as client:
         response = await client.get(download_url, follow_redirects=True)
