@@ -15,6 +15,8 @@ from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, Tu
 from botbuilder.schema import Activity, Attachment
 from openai import AzureOpenAI
 import pdfplumber
+import pytesseract
+from pdf2image import convert_from_bytes
 from docx import Document
 from azure.data.tables import TableServiceClient
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
@@ -136,9 +138,10 @@ def clear_pending_reformat(conversation_id: str):
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
-    """Extract text from PDF file bytes, including tables."""
+    """Extract text from PDF file bytes, including tables. Falls back to OCR for image-based PDFs."""
     text_parts = []
 
+    # First try pdfplumber for text-based PDFs
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
@@ -153,7 +156,25 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
                     if row_text:
                         text_parts.append(" | ".join(row_text))
 
-    return "\n".join(text_parts).strip()
+    text = "\n".join(text_parts).strip()
+
+    # If pdfplumber found no text, try OCR
+    if not text:
+        print("[DEBUG] No text from pdfplumber, trying OCR...")
+        try:
+            images = convert_from_bytes(file_bytes)
+            ocr_parts = []
+            for i, image in enumerate(images):
+                print(f"[DEBUG] OCR processing page {i + 1}/{len(images)}")
+                page_text = pytesseract.image_to_string(image)
+                if page_text.strip():
+                    ocr_parts.append(page_text.strip())
+            text = "\n".join(ocr_parts)
+            print(f"[DEBUG] OCR extracted {len(text)} chars")
+        except Exception as e:
+            print(f"[DEBUG] OCR failed: {e}")
+
+    return text
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:

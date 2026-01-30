@@ -11,3 +11,5 @@ aiohttp
 azure-data-tables
 azure-storage-blob
 gevent
+pytesseract
+pdf2image
