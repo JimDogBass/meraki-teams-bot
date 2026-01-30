@@ -237,10 +237,15 @@ async def extract_text_from_attachment(attachment, turn_context: TurnContext) ->
     content_type = attachment.content_type or ""
 
     try:
+        print(f"[DEBUG] Starting download for: {name}")
         file_bytes = await download_attachment(attachment, turn_context)
+        print(f"[DEBUG] Downloaded {len(file_bytes)} bytes")
 
         if name.lower().endswith('.pdf') or 'pdf' in content_type.lower():
-            return extract_text_from_pdf(file_bytes)
+            print(f"[DEBUG] Extracting text from PDF...")
+            text = extract_text_from_pdf(file_bytes)
+            print(f"[DEBUG] PDF extraction returned {len(text)} chars")
+            return text
         elif name.lower().endswith('.docx') or 'wordprocessingml' in content_type.lower():
             return extract_text_from_docx(file_bytes)
         elif name.lower().endswith('.doc'):
@@ -248,6 +253,7 @@ async def extract_text_from_attachment(attachment, turn_context: TurnContext) ->
         else:
             return f"[Unsupported file type: {name}]"
     except Exception as e:
+        print(f"[DEBUG] Extraction error: {type(e).__name__}: {str(e)}")
         return f"[Error extracting text from {name}: {str(e)}]"
 
 
