@@ -509,15 +509,21 @@ async def on_turn(turn_context: TurnContext):
             name = attachment.name or "unknown"
             if not name and isinstance(attachment.content, dict):
                 name = attachment.content.get("name", "unknown")
+            print(f"[DEBUG] Extracting text from: {name}")
             extracted = await extract_text_from_attachment(attachment, turn_context)
+            print(f"[DEBUG] Extraction result length: {len(extracted) if extracted else 0}")
+            print(f"[DEBUG] Extraction result preview: {extracted[:200] if extracted else 'EMPTY'}")
             if extracted and not extracted.startswith('['):
                 cv_files.append((name, extracted))
-            elif extracted.startswith('['):
+                print(f"[DEBUG] Added to cv_files: {name}")
+            elif extracted and extracted.startswith('['):
                 extraction_errors.append(extracted)
+                print(f"[DEBUG] Added to extraction_errors: {extracted}")
 
         # Check if we have any valid content (files or text)
         has_valid_files = len(cv_files) > 0
         has_text = bool(user_text.strip())
+        print(f"[DEBUG] cv_files count: {len(cv_files)}, has_valid_files: {has_valid_files}, has_text: {has_text}")
 
         # 3. Handle "Reformat CV" button press with no content
         if card_data and card_data.get("action") == "reformat_cv":
