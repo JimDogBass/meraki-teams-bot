@@ -178,9 +178,10 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
-    """Extract text from Word document bytes, including tables."""
+    """Extract text from Word document bytes, including nested tables."""
     doc = Document(io.BytesIO(file_bytes))
 
+    # First try standard extraction (paragraphs + top-level tables)
     text_parts = [para.text for para in doc.paragraphs]
 
     for table in doc.tables:
@@ -193,7 +194,27 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
             if row_text:
                 text_parts.append(" | ".join(row_text))
 
-    return "\n".join(text_parts).strip()
+    standard_text = "\n".join(text_parts).strip()
+
+    # If standard extraction got very little text, use deep XML extraction
+    # This handles nested tables common in CV templates
+    if len(standard_text) < 500:
+        print("[DEBUG] Standard extraction got little text, trying deep XML extraction...")
+        try:
+            body = doc._body._body
+            texts = []
+            for child in body.iter():
+                if child.tag.endswith('}t'):  # w:t text element
+                    if child.text:
+                        texts.append(child.text)
+            deep_text = ''.join(texts)
+            if len(deep_text) > len(standard_text):
+                print(f"[DEBUG] Deep extraction got {len(deep_text)} chars vs {len(standard_text)} standard")
+                return deep_text
+        except Exception as e:
+            print(f"[DEBUG] Deep extraction failed: {e}")
+
+    return standard_text
 
 
 def extract_text_from_doc(file_bytes: bytes) -> str:
