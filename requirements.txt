@@ -1,5 +1,6 @@
 flask
 gunicorn
+nest_asyncio
 openai
 PyPDF2
 pdfplumber

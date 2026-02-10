@@ -3,6 +3,9 @@ Fernando Format - CV Reformat Bot for Meraki Talent
 Single-function bot that reformats CVs with Meraki branding and generates alternative candidate profiles.
 Stripped down from "Jimmy Content" bot to focus solely on CV reformatting.
 """
+import nest_asyncio
+nest_asyncio.apply()
+
 import os
 import asyncio
 import io
