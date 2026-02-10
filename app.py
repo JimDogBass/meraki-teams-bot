@@ -306,13 +306,48 @@ def get_graph_token() -> str:
         return None
 
 
-async def get_files_from_chat(chat_id: str, token: str) -> list:
+async def get_files_from_chat(chat_id: str, token: str, user_aad_id: str = None) -> list:
     """Fetch recent files from a Teams chat using Graph API."""
     files = []
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Bot Framework conversation IDs need conversion for Graph API
+    import urllib.parse
+    graph_chat_id = chat_id
+    if graph_chat_id.startswith('a:'):
+        graph_chat_id = graph_chat_id[2:]
+
+    print(f"[DEBUG] Original chat_id: {chat_id[:50]}...")
+
+    # Try to find chat by user if we have their AAD ID
+    actual_chat_id = None
+    if user_aad_id:
+        print(f"[DEBUG] Trying to find chat for user: {user_aad_id}")
+        try:
+            # List chats involving this user
+            async with httpx.AsyncClient() as client:
+                chats_url = f"https://graph.microsoft.com/v1.0/users/{user_aad_id}/chats?$top=20"
+                resp = await client.get(chats_url, headers=headers)
+                print(f"[DEBUG] User chats response: {resp.status_code}")
+                if resp.status_code == 200:
+                    chats_data = resp.json()
+                    for chat in chats_data.get("value", []):
+                        print(f"[DEBUG] Found chat: {chat.get('id', '')[:50]}... type={chat.get('chatType')}")
+                        # Use the first 1:1 chat or matching chat
+                        if chat.get("chatType") == "oneOnOne":
+                            actual_chat_id = chat.get("id")
+                            print(f"[DEBUG] Using 1:1 chat: {actual_chat_id[:50]}...")
+                            break
+        except Exception as e:
+            print(f"[DEBUG] Failed to list user chats: {e}")
+
+    # Use found chat ID or try the encoded original
+    if not actual_chat_id:
+        actual_chat_id = urllib.parse.quote(graph_chat_id, safe='')
+        print(f"[DEBUG] Using encoded chat_id: {actual_chat_id[:50]}...")
 
     # Get recent messages from the chat
-    url = f"https://graph.microsoft.com/v1.0/chats/{chat_id}/messages?$top=10"
-    headers = {"Authorization": f"Bearer {token}"}
+    url = f"https://graph.microsoft.com/v1.0/chats/{actual_chat_id}/messages?$top=10"
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
@@ -725,10 +760,19 @@ async def on_turn(turn_context: TurnContext):
             token = get_graph_token()
             if token:
                 chat_id = conversation_id
-                # Teams chat IDs may need formatting for Graph API
-                print(f"[DEBUG] Attempting Graph API with chat_id: {chat_id}")
+                # Get user's AAD ID for finding the chat
+                user_aad_id = None
+                if activity.from_property and hasattr(activity.from_property, 'aad_object_id'):
+                    user_aad_id = activity.from_property.aad_object_id
+                if not user_aad_id and activity.from_property and hasattr(activity.from_property, 'id'):
+                    # Sometimes the ID is the AAD ID
+                    from_id = activity.from_property.id
+                    if from_id and '-' in from_id and len(from_id) == 36:  # GUID format
+                        user_aad_id = from_id
+                print(f"[DEBUG] User AAD ID: {user_aad_id}")
+                print(f"[DEBUG] From property: {activity.from_property.__dict__ if activity.from_property else 'None'}")
                 try:
-                    graph_files = await get_files_from_chat(chat_id, token)
+                    graph_files = await get_files_from_chat(chat_id, token, user_aad_id)
                     for gf in graph_files:
                         name = gf.get("name", "")
                         content_url = gf.get("content_url", "")
