@@ -25,6 +25,8 @@ from azure.data.tables import TableServiceClient
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
 from datetime import datetime, timedelta
 from cv_generator import create_meraki_cv, parse_cv_json, CV_EXTRACTION_PROMPT
+import re
+from html import unescape
 
 app = Flask(__name__)
 
@@ -138,6 +140,41 @@ def clear_pending_reformat(conversation_id: str):
         print(f"[DEBUG] Cleared pending state for {row_key}")
     except Exception as e:
         print(f"[DEBUG] Error clearing pending state: {e}")
+
+
+def extract_text_from_html(html_content: str) -> str:
+    """Extract plain text from HTML content."""
+    if not html_content:
+        return ""
+    # Remove script and style elements
+    text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # Replace br and p tags with newlines
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</p>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</li>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</tr>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</td>', ' | ', text, flags=re.IGNORECASE)
+    # Remove all remaining HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Decode HTML entities
+    text = unescape(text)
+    # Clean up whitespace
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    text = text.strip()
+    return text
+
+
+def is_cv_content(text: str) -> bool:
+    """Check if text looks like CV content."""
+    if len(text) < 200:
+        return False
+    cv_indicators = ['experience', 'education', 'skills', 'accomplishment', 'employment',
+                     'professional', 'qualification', 'certification', 'university', 'degree']
+    text_lower = text.lower()
+    matches = sum(1 for indicator in cv_indicators if indicator in text_lower)
+    return matches >= 2
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
@@ -565,9 +602,17 @@ async def on_turn(turn_context: TurnContext):
             if attachment.content_type and attachment.content_type.startswith('image/'):
                 print(f"[DEBUG] Skipping image attachment")
                 continue
-            # Skip empty HTML attachments (Teams sends these for formatting)
+            # Handle HTML attachments - Teams sometimes sends CV content as HTML
             if attachment.content_type == 'text/html':
-                print(f"[DEBUG] Skipping HTML attachment")
+                html_content = attachment.content or ""
+                if html_content:
+                    extracted_text = extract_text_from_html(html_content)
+                    print(f"[DEBUG] HTML attachment text length: {len(extracted_text)}")
+                    if is_cv_content(extracted_text):
+                        print(f"[DEBUG] HTML contains CV content, processing...")
+                        cv_files.append(("CV from Teams", extracted_text))
+                        continue
+                print(f"[DEBUG] Skipping empty/non-CV HTML attachment")
                 continue
             # Skip attachments with no download URL available
             has_download_url = (
