@@ -27,6 +27,7 @@ from datetime import datetime, timedelta
 from cv_generator import create_meraki_cv, parse_cv_json, CV_EXTRACTION_PROMPT
 import re
 from html import unescape
+import msal
 
 app = Flask(__name__)
 
@@ -277,6 +278,88 @@ def extract_text_from_doc(file_bytes: bytes) -> str:
             raise ValueError(f"antiword failed: {result.stderr}")
     finally:
         os.unlink(tmp_path)
+
+
+def get_graph_token() -> str:
+    """Get Microsoft Graph API token using app credentials."""
+    app_id = os.environ.get("MICROSOFT_APP_ID", "")
+    app_password = os.environ.get("MICROSOFT_APP_PASSWORD", "")
+    tenant_id = os.environ.get("MICROSOFT_APP_TENANT_ID", "")
+
+    if not all([app_id, app_password, tenant_id]):
+        print("[DEBUG] Missing credentials for Graph API")
+        return None
+
+    authority = f"https://login.microsoftonline.com/{tenant_id}"
+    app = msal.ConfidentialClientApplication(
+        app_id,
+        authority=authority,
+        client_credential=app_password
+    )
+
+    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    if "access_token" in result:
+        print("[DEBUG] Got Graph API token")
+        return result["access_token"]
+    else:
+        print(f"[DEBUG] Failed to get Graph token: {result.get('error_description', result)}")
+        return None
+
+
+async def get_files_from_chat(chat_id: str, token: str) -> list:
+    """Fetch recent files from a Teams chat using Graph API."""
+    files = []
+
+    # Get recent messages from the chat
+    url = f"https://graph.microsoft.com/v1.0/chats/{chat_id}/messages?$top=10"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        print(f"[DEBUG] Graph API response status: {response.status_code}")
+
+        if response.status_code != 200:
+            print(f"[DEBUG] Graph API error: {response.text}")
+            return files
+
+        data = response.json()
+        for message in data.get("value", []):
+            attachments = message.get("attachments", [])
+            for att in attachments:
+                content_type = att.get("contentType", "")
+                name = att.get("name", "")
+                print(f"[DEBUG] Graph found attachment: {name} ({content_type})")
+
+                # Check for file reference
+                if att.get("contentUrl"):
+                    files.append({
+                        "name": name,
+                        "content_url": att.get("contentUrl"),
+                        "content_type": content_type
+                    })
+
+            # Also check hosted contents
+            hosted = message.get("hostedContents", [])
+            for hc in hosted:
+                print(f"[DEBUG] Found hosted content: {hc}")
+
+    return files
+
+
+async def download_file_from_sharepoint(file_url: str, token: str) -> bytes:
+    """Download a file from SharePoint using Graph API."""
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async with httpx.AsyncClient() as client:
+        # If it's a SharePoint URL, we need to convert it to a Graph API download URL
+        if "sharepoint.com" in file_url:
+            # Extract the drive item path and use Graph API
+            response = await client.get(file_url, headers=headers, follow_redirects=True)
+        else:
+            response = await client.get(file_url, headers=headers, follow_redirects=True)
+
+        response.raise_for_status()
+        return response.content
 
 
 async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
@@ -635,6 +718,39 @@ async def on_turn(turn_context: TurnContext):
             elif extracted and extracted.startswith('['):
                 extraction_errors.append(extracted)
                 print(f"[DEBUG] Added to extraction_errors: {extracted}")
+
+        # If no files found via direct attachments, try Graph API to fetch from chat
+        if len(cv_files) == 0 and len(attachments) > 0:
+            print("[DEBUG] No files from direct attachments, trying Graph API...")
+            token = get_graph_token()
+            if token:
+                chat_id = conversation_id
+                # Teams chat IDs may need formatting for Graph API
+                print(f"[DEBUG] Attempting Graph API with chat_id: {chat_id}")
+                try:
+                    graph_files = await get_files_from_chat(chat_id, token)
+                    for gf in graph_files:
+                        name = gf.get("name", "")
+                        content_url = gf.get("content_url", "")
+                        if name.lower().endswith(('.pdf', '.docx', '.doc')) and content_url:
+                            print(f"[DEBUG] Downloading from Graph: {name}")
+                            try:
+                                file_bytes = await download_file_from_sharepoint(content_url, token)
+                                if name.lower().endswith('.pdf'):
+                                    text = extract_text_from_pdf(file_bytes)
+                                elif name.lower().endswith('.docx'):
+                                    text = extract_text_from_docx(file_bytes)
+                                elif name.lower().endswith('.doc'):
+                                    text = extract_text_from_doc(file_bytes)
+                                else:
+                                    continue
+                                if text and not text.startswith('['):
+                                    cv_files.append((name, text))
+                                    print(f"[DEBUG] Added from Graph: {name}")
+                            except Exception as e:
+                                print(f"[DEBUG] Failed to download {name}: {e}")
+                except Exception as e:
+                    print(f"[DEBUG] Graph API fetch failed: {e}")
 
         # Check if we have any valid content (files or text)
         has_valid_files = len(cv_files) > 0

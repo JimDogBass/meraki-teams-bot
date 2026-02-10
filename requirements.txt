@@ -11,6 +11,7 @@ botbuilder-schema
 aiohttp
 azure-data-tables
 azure-storage-blob
+msal
 gevent
 pytesseract
 pdf2image
