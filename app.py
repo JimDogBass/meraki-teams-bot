@@ -542,12 +542,18 @@ async def on_turn(turn_context: TurnContext):
         # Extract text from any file attachments (keep separate for multi-CV support)
         cv_files = []  # List of (filename, extracted_text) tuples
         extraction_errors = []
-        for attachment in attachments:
+        print(f"[DEBUG] Total attachments received: {len(attachments)}")
+        for idx, attachment in enumerate(attachments):
+            print(f"[DEBUG] Attachment {idx}: content_type={attachment.content_type}, name={attachment.name}")
+            print(f"[DEBUG] Attachment {idx}: content_url={attachment.content_url}")
+            print(f"[DEBUG] Attachment {idx}: content={attachment.content}")
             # Skip image attachments
             if attachment.content_type and attachment.content_type.startswith('image/'):
+                print(f"[DEBUG] Skipping image attachment")
                 continue
             # Skip empty HTML attachments (Teams sends these for formatting)
             if attachment.content_type == 'text/html':
+                print(f"[DEBUG] Skipping HTML attachment")
                 continue
             # Skip attachments with no download URL available
             has_download_url = (
