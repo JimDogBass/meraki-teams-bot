@@ -13,6 +13,8 @@ import time
 import httpx
 import tempfile
 import subprocess
+import base64
+import urllib.parse
 from flask import Flask, request, Response
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, Attachment
@@ -53,11 +55,10 @@ blob_service_client = None
 if storage_connection_string:
     table_service_client = TableServiceClient.from_connection_string(storage_connection_string)
     blob_service_client = BlobServiceClient.from_connection_string(storage_connection_string)
-    # Ensure cv-outputs container exists
     try:
         blob_service_client.create_container("cv-outputs")
     except Exception:
-        pass  # Container already exists
+        pass
 
 # Pending state TTL - for button click -> file upload flow
 PENDING_ROLE_TTL_SECONDS = 300  # 5 minutes
@@ -76,7 +77,6 @@ Output ONLY the profile text, nothing else."""
 def get_pending_reformat(conversation_id: str) -> bool:
     """Check if there's a pending reformat request for this conversation."""
     if not table_service_client:
-        print("[DEBUG] No table_service_client for pending state")
         return False
 
     try:
@@ -88,15 +88,13 @@ def get_pending_reformat(conversation_id: str) -> bool:
             timestamp = entity.get("Timestamp_", 0)
 
             if time.time() - timestamp < PENDING_ROLE_TTL_SECONDS:
-                print(f"[DEBUG] Found pending reformat state")
                 return True
             else:
                 table_client.delete_entity(partition_key="pending_role", row_key=row_key)
-                print("[DEBUG] Pending state expired")
         except Exception:
-            print("[DEBUG] No pending state found in table")
+            pass
     except Exception as e:
-        print(f"[DEBUG] Error getting pending state: {e}")
+        print(f"[ERROR] Getting pending state: {e}")
 
     return False
 
@@ -104,7 +102,6 @@ def get_pending_reformat(conversation_id: str) -> bool:
 def set_pending_reformat(conversation_id: str):
     """Set a pending reformat request in Azure Table Storage."""
     if not table_service_client:
-        print("[DEBUG] No table_service_client to set pending state")
         return
 
     try:
@@ -113,7 +110,7 @@ def set_pending_reformat(conversation_id: str):
         try:
             table_service_client.create_table("BotState")
         except Exception:
-            pass  # Table already exists
+            pass
 
         row_key = str(hash(conversation_id) & 0xFFFFFFFF)
         entity = {
@@ -124,9 +121,8 @@ def set_pending_reformat(conversation_id: str):
             "Timestamp_": time.time()
         }
         table_client.upsert_entity(entity)
-        print(f"[DEBUG] Set pending reformat state for {row_key}")
     except Exception as e:
-        print(f"[DEBUG] Error setting pending state: {e}")
+        print(f"[ERROR] Setting pending state: {e}")
 
 
 def clear_pending_reformat(conversation_id: str):
@@ -138,29 +134,23 @@ def clear_pending_reformat(conversation_id: str):
         table_client = table_service_client.get_table_client("BotState")
         row_key = str(hash(conversation_id) & 0xFFFFFFFF)
         table_client.delete_entity(partition_key="pending_role", row_key=row_key)
-        print(f"[DEBUG] Cleared pending state for {row_key}")
-    except Exception as e:
-        print(f"[DEBUG] Error clearing pending state: {e}")
+    except Exception:
+        pass
 
 
 def extract_text_from_html(html_content: str) -> str:
     """Extract plain text from HTML content."""
     if not html_content:
         return ""
-    # Remove script and style elements
     text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
-    # Replace br and p tags with newlines
     text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
     text = re.sub(r'</p>', '\n', text, flags=re.IGNORECASE)
     text = re.sub(r'</li>', '\n', text, flags=re.IGNORECASE)
     text = re.sub(r'</tr>', '\n', text, flags=re.IGNORECASE)
     text = re.sub(r'</td>', ' | ', text, flags=re.IGNORECASE)
-    # Remove all remaining HTML tags
     text = re.sub(r'<[^>]+>', '', text)
-    # Decode HTML entities
     text = unescape(text)
-    # Clean up whitespace
     text = re.sub(r'[ \t]+', ' ', text)
     text = re.sub(r'\n\s*\n', '\n\n', text)
     text = text.strip()
@@ -182,7 +172,6 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     """Extract text from PDF file bytes, including tables. Falls back to OCR for image-based PDFs."""
     text_parts = []
 
-    # First try pdfplumber for text-based PDFs
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
@@ -201,19 +190,16 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
     # If pdfplumber found no text, try OCR
     if not text:
-        print("[DEBUG] No text from pdfplumber, trying OCR...")
         try:
             images = convert_from_bytes(file_bytes)
             ocr_parts = []
-            for i, image in enumerate(images):
-                print(f"[DEBUG] OCR processing page {i + 1}/{len(images)}")
+            for image in images:
                 page_text = pytesseract.image_to_string(image)
                 if page_text.strip():
                     ocr_parts.append(page_text.strip())
             text = "\n".join(ocr_parts)
-            print(f"[DEBUG] OCR extracted {len(text)} chars")
         except Exception as e:
-            print(f"[DEBUG] OCR failed: {e}")
+            print(f"[ERROR] OCR failed: {e}")
 
     return text
 
@@ -222,7 +208,6 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
     """Extract text from Word document bytes, including nested tables."""
     doc = Document(io.BytesIO(file_bytes))
 
-    # First try standard extraction (paragraphs + top-level tables)
     text_parts = [para.text for para in doc.paragraphs]
 
     for table in doc.tables:
@@ -238,22 +223,19 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
     standard_text = "\n".join(text_parts).strip()
 
     # If standard extraction got very little text, use deep XML extraction
-    # This handles nested tables common in CV templates
     if len(standard_text) < 500:
-        print("[DEBUG] Standard extraction got little text, trying deep XML extraction...")
         try:
             body = doc._body._body
             texts = []
             for child in body.iter():
-                if child.tag.endswith('}t'):  # w:t text element
+                if child.tag.endswith('}t'):
                     if child.text:
                         texts.append(child.text)
             deep_text = ''.join(texts)
             if len(deep_text) > len(standard_text):
-                print(f"[DEBUG] Deep extraction got {len(deep_text)} chars vs {len(standard_text)} standard")
                 return deep_text
-        except Exception as e:
-            print(f"[DEBUG] Deep extraction failed: {e}")
+        except Exception:
+            pass
 
     return standard_text
 
@@ -287,22 +269,20 @@ def get_graph_token() -> str:
     tenant_id = os.environ.get("MICROSOFT_APP_TENANT_ID", "")
 
     if not all([app_id, app_password, tenant_id]):
-        print("[DEBUG] Missing credentials for Graph API")
         return None
 
     authority = f"https://login.microsoftonline.com/{tenant_id}"
-    app = msal.ConfidentialClientApplication(
+    msal_app = msal.ConfidentialClientApplication(
         app_id,
         authority=authority,
         client_credential=app_password
     )
 
-    result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+    result = msal_app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
     if "access_token" in result:
-        print("[DEBUG] Got Graph API token")
         return result["access_token"]
     else:
-        print(f"[DEBUG] Failed to get Graph token: {result.get('error_description', result)}")
+        print(f"[ERROR] Failed to get Graph token: {result.get('error_description', result)}")
         return None
 
 
@@ -311,89 +291,61 @@ async def get_files_from_chat(chat_id: str, token: str, user_aad_id: str = None)
     files = []
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Bot Framework conversation IDs need conversion for Graph API
-    import urllib.parse
     graph_chat_id = chat_id
     if graph_chat_id.startswith('a:'):
         graph_chat_id = graph_chat_id[2:]
 
-    print(f"[DEBUG] Original chat_id: {chat_id[:50]}...")
-
     # Try to find chat by user if we have their AAD ID
     actual_chat_id = None
     if user_aad_id:
-        print(f"[DEBUG] Trying to find chat for user: {user_aad_id}")
         try:
-            # List chats involving this user
             async with httpx.AsyncClient() as client:
                 chats_url = f"https://graph.microsoft.com/v1.0/users/{user_aad_id}/chats?$top=20"
                 resp = await client.get(chats_url, headers=headers)
-                print(f"[DEBUG] User chats response: {resp.status_code}")
                 if resp.status_code == 200:
                     chats_data = resp.json()
                     for chat in chats_data.get("value", []):
-                        print(f"[DEBUG] Found chat: {chat.get('id', '')[:50]}... type={chat.get('chatType')}")
-                        # Use the first 1:1 chat or matching chat
                         if chat.get("chatType") == "oneOnOne":
                             actual_chat_id = chat.get("id")
-                            print(f"[DEBUG] Using 1:1 chat: {actual_chat_id[:50]}...")
                             break
         except Exception as e:
-            print(f"[DEBUG] Failed to list user chats: {e}")
+            print(f"[ERROR] Failed to list user chats: {e}")
 
-    # Use found chat ID or try the encoded original
     if not actual_chat_id:
         actual_chat_id = urllib.parse.quote(graph_chat_id, safe='')
-        print(f"[DEBUG] Using encoded chat_id: {actual_chat_id[:50]}...")
 
-    # Get recent messages from the chat
     url = f"https://graph.microsoft.com/v1.0/chats/{actual_chat_id}/messages?$top=10"
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url, headers=headers)
-        print(f"[DEBUG] Graph API response status: {response.status_code}")
 
         if response.status_code != 200:
-            print(f"[DEBUG] Graph API error: {response.text}")
             return files
 
         data = response.json()
         for message in data.get("value", []):
             attachments = message.get("attachments", [])
             for att in attachments:
-                content_type = att.get("contentType", "")
                 name = att.get("name", "")
-                print(f"[DEBUG] Graph found attachment: {name} ({content_type})")
-
-                # Check for file reference
                 if att.get("contentUrl"):
                     files.append({
                         "name": name,
                         "content_url": att.get("contentUrl"),
-                        "content_type": content_type
+                        "content_type": att.get("contentType", "")
                     })
-
-            # Also check hosted contents
-            hosted = message.get("hostedContents", [])
-            for hc in hosted:
-                print(f"[DEBUG] Found hosted content: {hc}")
 
     return files
 
 
 async def download_file_from_sharepoint(file_url: str, token: str) -> bytes:
     """Download a file from SharePoint using Graph API."""
-    import base64
     headers = {"Authorization": f"Bearer {token}"}
 
     async with httpx.AsyncClient() as client:
         if "sharepoint.com" in file_url:
-            # Convert SharePoint URL to Graph API sharing URL
-            # Encode the URL as a sharing token
             encoded_url = base64.urlsafe_b64encode(file_url.encode()).decode().rstrip('=')
             share_id = f"u!{encoded_url}"
             graph_url = f"https://graph.microsoft.com/v1.0/shares/{share_id}/driveItem/content"
-            print(f"[DEBUG] Converted to Graph sharing URL: {graph_url[:80]}...")
             response = await client.get(graph_url, headers=headers, follow_redirects=True)
         else:
             response = await client.get(file_url, headers=headers, follow_redirects=True)
@@ -406,13 +358,6 @@ async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
     """Download attachment from Teams."""
     download_url = None
 
-    # Debug: Log full attachment structure
-    print(f"[DEBUG] Attachment content_type: {attachment.content_type}")
-    print(f"[DEBUG] Attachment content_url: {attachment.content_url}")
-    print(f"[DEBUG] Attachment name: {attachment.name}")
-    print(f"[DEBUG] Attachment content type: {type(attachment.content)}")
-    print(f"[DEBUG] Attachment content: {attachment.content}")
-
     if attachment.content_type == "application/vnd.microsoft.teams.file.download.info":
         if isinstance(attachment.content, dict) and "downloadUrl" in attachment.content:
             download_url = attachment.content["downloadUrl"]
@@ -420,13 +365,11 @@ async def download_attachment(attachment, turn_context: TurnContext) -> bytes:
     if not download_url and attachment.content_url:
         download_url = attachment.content_url
 
-    # Also check for download URL in content dict regardless of content_type
     if not download_url and isinstance(attachment.content, dict):
         download_url = attachment.content.get("downloadUrl") or attachment.content.get("download_url")
-        print(f"[DEBUG] Tried content dict fallback, got: {download_url}")
 
     if not download_url:
-        raise ValueError(f"No download URL found in attachment. content_type={attachment.content_type}, content={attachment.content}")
+        raise ValueError(f"No download URL found in attachment")
 
     async with httpx.AsyncClient() as client:
         response = await client.get(download_url, follow_redirects=True)
@@ -442,15 +385,10 @@ async def extract_text_from_attachment(attachment, turn_context: TurnContext) ->
     content_type = attachment.content_type or ""
 
     try:
-        print(f"[DEBUG] Starting download for: {name}")
         file_bytes = await download_attachment(attachment, turn_context)
-        print(f"[DEBUG] Downloaded {len(file_bytes)} bytes")
 
         if name.lower().endswith('.pdf') or 'pdf' in content_type.lower():
-            print(f"[DEBUG] Extracting text from PDF...")
-            text = extract_text_from_pdf(file_bytes)
-            print(f"[DEBUG] PDF extraction returned {len(text)} chars")
-            return text
+            return extract_text_from_pdf(file_bytes)
         elif name.lower().endswith('.docx') or 'wordprocessingml' in content_type.lower():
             return extract_text_from_docx(file_bytes)
         elif name.lower().endswith('.doc'):
@@ -458,7 +396,6 @@ async def extract_text_from_attachment(attachment, turn_context: TurnContext) ->
         else:
             return f"[Unsupported file type: {name}]"
     except Exception as e:
-        print(f"[DEBUG] Extraction error: {type(e).__name__}: {str(e)}")
         return f"[Error extracting text from {name}: {str(e)}]"
 
 
@@ -533,7 +470,7 @@ def generate_alternative_profile(cv_json: str) -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"[DEBUG] Error generating alternative profile: {e}")
+        print(f"[ERROR] Generating alternative profile: {e}")
         return ""
 
 
@@ -600,11 +537,9 @@ async def process_cv_reformat(cv_text: str, turn_context: TurnContext, show_star
                 f"_Link expires in 7 days_"
             )
 
-            # Add alternative profile if generated
             if alternative_profile:
                 response_text += f"\n\n**Alternative Candidate Profile:**\n{alternative_profile}"
 
-            # Send output (with Start New button only if requested)
             if show_start_new:
                 start_new_card = create_start_new_card()
                 reply = Activity(
@@ -631,10 +566,7 @@ async def process_cv_reformat(cv_text: str, turn_context: TurnContext, show_star
 
 
 async def process_multiple_cvs(cv_files: list, turn_context: TurnContext):
-    """
-    Process multiple CV files separately.
-    cv_files: list of tuples [(filename, extracted_text), ...]
-    """
+    """Process multiple CV files separately."""
     total = len(cv_files)
 
     if total > 1:
@@ -646,13 +578,10 @@ async def process_multiple_cvs(cv_files: list, turn_context: TurnContext):
         if total > 1:
             await turn_context.send_activity(f"**Processing CV {i + 1} of {total}:** {filename}")
 
-        # For single file: show Start New button after processing
-        # For multiple files: don't show button until final summary
         show_button = is_last and total == 1
         await process_cv_reformat(cv_text, turn_context, show_start_new=show_button, source_filename=filename)
 
     if total > 1:
-        # Show final summary with Start New button
         start_new_card = create_start_new_card()
         reply = Activity(
             type="message",
@@ -663,37 +592,12 @@ async def process_multiple_cvs(cv_files: list, turn_context: TurnContext):
 
 
 async def on_turn(turn_context: TurnContext):
-    """
-    Simplified message handler for Fernando Format bot.
-
-    Flow:
-    1. Help commands -> show simple card
-    2. "Start New" button -> show simple card
-    3. "Reformat CV" button (no content) -> set pending state, ask for CV
-    4. Pending state + content -> process CV
-    5. Reformat trigger words in message -> process CV
-    6. File attached (no trigger) -> assume reformat, process CV
-    7. Fallback -> show simple card
-    """
+    """Message handler for Fernando Format bot."""
     if turn_context.activity.type == "message":
         user_text = turn_context.activity.text or ""
         attachments = turn_context.activity.attachments or []
         conversation_id = turn_context.activity.conversation.id
-
-        # Debug: Log full activity structure to find file references
         activity = turn_context.activity
-        print(f"[DEBUG] Activity type: {activity.type}")
-        print(f"[DEBUG] Activity text: {activity.text}")
-        print(f"[DEBUG] Activity value: {activity.value}")
-        if activity.entities:
-            for i, entity in enumerate(activity.entities):
-                print(f"[DEBUG] Entity {i} type: {entity.type}")
-                print(f"[DEBUG] Entity {i} dict: {entity.__dict__}")
-        if hasattr(activity, 'channel_data') and activity.channel_data:
-            import json
-            print(f"[DEBUG] Channel data: {json.dumps(activity.channel_data, indent=2, default=str)}")
-
-        # Check for Adaptive Card button data
         card_data = turn_context.activity.value
 
         # 1. Handle help commands
@@ -712,30 +616,21 @@ async def on_turn(turn_context: TurnContext):
             await turn_context.send_activity(reply)
             return
 
-        # Extract text from any file attachments (keep separate for multi-CV support)
-        cv_files = []  # List of (filename, extracted_text) tuples
+        # Extract text from any file attachments
+        cv_files = []
         extraction_errors = []
-        print(f"[DEBUG] Total attachments received: {len(attachments)}")
-        for idx, attachment in enumerate(attachments):
-            print(f"[DEBUG] Attachment {idx}: content_type={attachment.content_type}, name={attachment.name}")
-            print(f"[DEBUG] Attachment {idx}: content_url={attachment.content_url}")
-            print(f"[DEBUG] Attachment {idx}: content={attachment.content}")
-            print(f"[DEBUG] Attachment {idx} full dict: {attachment.__dict__}")
+        for attachment in attachments:
             # Skip image attachments
             if attachment.content_type and attachment.content_type.startswith('image/'):
-                print(f"[DEBUG] Skipping image attachment")
                 continue
             # Handle HTML attachments - Teams sometimes sends CV content as HTML
             if attachment.content_type == 'text/html':
                 html_content = attachment.content or ""
                 if html_content:
                     extracted_text = extract_text_from_html(html_content)
-                    print(f"[DEBUG] HTML attachment text length: {len(extracted_text)}")
                     if is_cv_content(extracted_text):
-                        print(f"[DEBUG] HTML contains CV content, processing...")
                         cv_files.append(("CV from Teams", extracted_text))
                         continue
-                print(f"[DEBUG] Skipping empty/non-CV HTML attachment")
                 continue
             # Skip attachments with no download URL available
             has_download_url = (
@@ -743,46 +638,29 @@ async def on_turn(turn_context: TurnContext):
                 (isinstance(attachment.content, dict) and attachment.content.get('downloadUrl'))
             )
             if not has_download_url:
-                print(f"[DEBUG] Skipping attachment with no download URL: {attachment.content_type}")
                 continue
             name = attachment.name or "unknown"
             if not name and isinstance(attachment.content, dict):
                 name = attachment.content.get("name", "unknown")
-            print(f"[DEBUG] Extracting text from: {name}")
             extracted = await extract_text_from_attachment(attachment, turn_context)
-            print(f"[DEBUG] Extraction result length: {len(extracted) if extracted else 0}")
-            print(f"[DEBUG] Extraction result preview: {extracted[:200] if extracted else 'EMPTY'}")
             if extracted and not extracted.startswith('['):
                 cv_files.append((name, extracted))
-                print(f"[DEBUG] Added to cv_files: {name}")
             elif extracted and extracted.startswith('['):
                 extraction_errors.append(extracted)
-                print(f"[DEBUG] Added to extraction_errors: {extracted}")
 
         # If no files found via direct attachments, try Graph API to fetch from chat
         if len(cv_files) == 0 and len(attachments) > 0:
-            print("[DEBUG] No files from direct attachments, trying Graph API...")
             token = get_graph_token()
             if token:
-                chat_id = conversation_id
-                # Get user's AAD ID for finding the chat
                 user_aad_id = None
                 if activity.from_property and hasattr(activity.from_property, 'aad_object_id'):
                     user_aad_id = activity.from_property.aad_object_id
-                if not user_aad_id and activity.from_property and hasattr(activity.from_property, 'id'):
-                    # Sometimes the ID is the AAD ID
-                    from_id = activity.from_property.id
-                    if from_id and '-' in from_id and len(from_id) == 36:  # GUID format
-                        user_aad_id = from_id
-                print(f"[DEBUG] User AAD ID: {user_aad_id}")
-                print(f"[DEBUG] From property: {activity.from_property.__dict__ if activity.from_property else 'None'}")
                 try:
-                    graph_files = await get_files_from_chat(chat_id, token, user_aad_id)
+                    graph_files = await get_files_from_chat(conversation_id, token, user_aad_id)
                     for gf in graph_files:
                         name = gf.get("name", "")
                         content_url = gf.get("content_url", "")
                         if name.lower().endswith(('.pdf', '.docx', '.doc')) and content_url:
-                            print(f"[DEBUG] Downloading from Graph: {name}")
                             try:
                                 file_bytes = await download_file_from_sharepoint(content_url, token)
                                 if name.lower().endswith('.pdf'):
@@ -795,16 +673,13 @@ async def on_turn(turn_context: TurnContext):
                                     continue
                                 if text and not text.startswith('['):
                                     cv_files.append((name, text))
-                                    print(f"[DEBUG] Added from Graph: {name}")
                             except Exception as e:
-                                print(f"[DEBUG] Failed to download {name}: {e}")
+                                print(f"[ERROR] Failed to download {name}: {e}")
                 except Exception as e:
-                    print(f"[DEBUG] Graph API fetch failed: {e}")
+                    print(f"[ERROR] Graph API fetch failed: {e}")
 
-        # Check if we have any valid content (files or text)
         has_valid_files = len(cv_files) > 0
         has_text = bool(user_text.strip())
-        print(f"[DEBUG] cv_files count: {len(cv_files)}, has_valid_files: {has_valid_files}, has_text: {has_text}")
 
         # 3. Handle "Reformat CV" button press with no content
         if card_data and card_data.get("action") == "reformat_cv":
@@ -813,7 +688,6 @@ async def on_turn(turn_context: TurnContext):
                 await turn_context.send_activity("Great! Send me the CV(s) - you can paste text or upload PDF/Word files.")
                 return
             else:
-                # Button pressed with content attached - process immediately
                 clear_pending_reformat(conversation_id)
                 if has_valid_files:
                     await process_multiple_cvs(cv_files, turn_context)
@@ -833,11 +707,9 @@ async def on_turn(turn_context: TurnContext):
         # 5. Check for reformat trigger words in message
         if is_reformat_trigger(user_text):
             if has_valid_files:
-                # Files attached with trigger word
                 await process_multiple_cvs(cv_files, turn_context)
                 return
             elif has_text:
-                # Text pasted with trigger word - strip trigger from beginning if present
                 content_to_process = user_text
                 words = content_to_process.split(None, 1)
                 if len(words) > 1 and is_reformat_trigger(words[0]):
@@ -845,7 +717,6 @@ async def on_turn(turn_context: TurnContext):
                 if content_to_process.strip():
                     await process_cv_reformat(content_to_process, turn_context)
                     return
-            # No content, set pending state
             set_pending_reformat(conversation_id)
             await turn_context.send_activity("Send me the CV(s) to reformat - paste text or upload PDF/Word files.")
             return
