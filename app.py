@@ -520,6 +520,15 @@ async def on_turn(turn_context: TurnContext):
         attachments = turn_context.activity.attachments or []
         conversation_id = turn_context.activity.conversation.id
 
+        # Debug: Log full activity structure to find file references
+        activity = turn_context.activity
+        print(f"[DEBUG] Activity type: {activity.type}")
+        print(f"[DEBUG] Activity text: {activity.text}")
+        print(f"[DEBUG] Activity value: {activity.value}")
+        print(f"[DEBUG] Activity entities: {activity.entities}")
+        if hasattr(activity, 'channel_data') and activity.channel_data:
+            print(f"[DEBUG] Channel data: {activity.channel_data}")
+
         # Check for Adaptive Card button data
         card_data = turn_context.activity.value
 
