@@ -525,9 +525,13 @@ async def on_turn(turn_context: TurnContext):
         print(f"[DEBUG] Activity type: {activity.type}")
         print(f"[DEBUG] Activity text: {activity.text}")
         print(f"[DEBUG] Activity value: {activity.value}")
-        print(f"[DEBUG] Activity entities: {activity.entities}")
+        if activity.entities:
+            for i, entity in enumerate(activity.entities):
+                print(f"[DEBUG] Entity {i} type: {entity.type}")
+                print(f"[DEBUG] Entity {i} dict: {entity.__dict__}")
         if hasattr(activity, 'channel_data') and activity.channel_data:
-            print(f"[DEBUG] Channel data: {activity.channel_data}")
+            import json
+            print(f"[DEBUG] Channel data: {json.dumps(activity.channel_data, indent=2, default=str)}")
 
         # Check for Adaptive Card button data
         card_data = turn_context.activity.value
@@ -556,6 +560,7 @@ async def on_turn(turn_context: TurnContext):
             print(f"[DEBUG] Attachment {idx}: content_type={attachment.content_type}, name={attachment.name}")
             print(f"[DEBUG] Attachment {idx}: content_url={attachment.content_url}")
             print(f"[DEBUG] Attachment {idx}: content={attachment.content}")
+            print(f"[DEBUG] Attachment {idx} full dict: {attachment.__dict__}")
             # Skip image attachments
             if attachment.content_type and attachment.content_type.startswith('image/'):
                 print(f"[DEBUG] Skipping image attachment")
