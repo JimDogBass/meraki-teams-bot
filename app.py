@@ -383,13 +383,18 @@ async def get_files_from_chat(chat_id: str, token: str, user_aad_id: str = None)
 
 async def download_file_from_sharepoint(file_url: str, token: str) -> bytes:
     """Download a file from SharePoint using Graph API."""
+    import base64
     headers = {"Authorization": f"Bearer {token}"}
 
     async with httpx.AsyncClient() as client:
-        # If it's a SharePoint URL, we need to convert it to a Graph API download URL
         if "sharepoint.com" in file_url:
-            # Extract the drive item path and use Graph API
-            response = await client.get(file_url, headers=headers, follow_redirects=True)
+            # Convert SharePoint URL to Graph API sharing URL
+            # Encode the URL as a sharing token
+            encoded_url = base64.urlsafe_b64encode(file_url.encode()).decode().rstrip('=')
+            share_id = f"u!{encoded_url}"
+            graph_url = f"https://graph.microsoft.com/v1.0/shares/{share_id}/driveItem/content"
+            print(f"[DEBUG] Converted to Graph sharing URL: {graph_url[:80]}...")
+            response = await client.get(graph_url, headers=headers, follow_redirects=True)
         else:
             response = await client.get(file_url, headers=headers, follow_redirects=True)
 
