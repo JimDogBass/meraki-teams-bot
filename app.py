@@ -738,9 +738,15 @@ async def on_turn(turn_context: TurnContext):
         await turn_context.send_activity(reply)
 
 
+_START_TIME = datetime.now().isoformat()
+
 @app.route("/")
 def home():
     return "Fernando Format bot is running!"
+
+@app.route("/health")
+def health():
+    return {"status": "healthy", "service": "fernando-format", "started_at": _START_TIME}
 
 
 @app.route("/api/messages", methods=["POST"])
