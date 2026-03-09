@@ -4,6 +4,7 @@ nest_asyncio
 openai
 PyPDF2
 pdfplumber
+pymupdf
 python-docx
 httpx
 botbuilder-core

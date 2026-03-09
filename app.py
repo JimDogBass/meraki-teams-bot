@@ -168,8 +168,93 @@ def is_cv_content(text: str) -> bool:
     return matches >= 2
 
 
+def detect_text_corruption(text: str) -> bool:
+    """Detect if extracted PDF text has ligature/encoding corruption.
+
+    PDFs with embedded fonts (e.g. from Google Docs) often use custom glyph
+    mappings for ligatures like 'ti', 'fi', 'fl', 'ff', 'ft'. When pdfplumber
+    can't decode these, they appear as wrong characters mid-word, e.g.
+    'Marketing' → 'MarkeUng', 'creative' → 'creaGve', 'platforms' → 'plaBorms'.
+
+    Heuristic: count words with unexpected uppercase letters following lowercase
+    letters in the middle of a word. If more than 3% of eligible words show this
+    pattern, the text is likely corrupted.
+    """
+    if not text or len(text) < 100:
+        return False
+
+    words = text.split()
+    if len(words) < 20:
+        return False
+
+    suspicious = 0
+    checked = 0
+
+    for word in words:
+        if len(word) < 4:
+            continue
+        if word.isupper() or word.isdigit():
+            continue
+        if '@' in word or '/' in word or '.' in word:
+            continue
+
+        checked += 1
+
+        for j in range(2, len(word)):
+            if word[j].isupper() and word[j - 1].islower():
+                suspicious += 1
+                break
+
+    if checked == 0:
+        return False
+
+    ratio = suspicious / checked
+    return ratio > 0.03
+
+
+def extract_text_with_pymupdf(file_bytes: bytes) -> str:
+    """Extract text using PyMuPDF (better ligature/CMap handling than pdfplumber)."""
+    try:
+        import fitz
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        text_parts = []
+        for page in doc:
+            text = page.get_text()
+            if text:
+                text_parts.append(text)
+        doc.close()
+        return "\n".join(text_parts).strip()
+    except ImportError:
+        print("[WARN] PyMuPDF not installed, skipping")
+        return ""
+    except Exception as e:
+        print(f"[ERROR] PyMuPDF extraction failed: {e}")
+        return ""
+
+
+def extract_text_with_ocr(file_bytes: bytes) -> str:
+    """Extract text using OCR (tesseract + pdf2image)."""
+    try:
+        images = convert_from_bytes(file_bytes)
+        ocr_parts = []
+        for image in images:
+            page_text = pytesseract.image_to_string(image)
+            if page_text.strip():
+                ocr_parts.append(page_text.strip())
+        return "\n".join(ocr_parts)
+    except Exception as e:
+        print(f"[ERROR] OCR failed: {e}")
+        return ""
+
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
-    """Extract text from PDF file bytes, including tables. Falls back to OCR for image-based PDFs."""
+    """Extract text from PDF file bytes, including tables.
+
+    Uses a 3-tier fallback chain:
+    1. pdfplumber (good for tables, works for most PDFs)
+    2. PyMuPDF (better ligature/font decoding)
+    3. OCR via tesseract (last resort for image-based or badly encoded PDFs)
+    """
     text_parts = []
 
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
@@ -188,18 +273,39 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
     text = "\n".join(text_parts).strip()
 
-    # If pdfplumber found no text, try OCR
+    # If pdfplumber got text but it's corrupted (ligature issue), try alternatives
+    if text and detect_text_corruption(text):
+        print("[WARN] PDF text corruption detected (likely ligature decoding failure)")
+
+        pymupdf_text = extract_text_with_pymupdf(file_bytes)
+        if pymupdf_text and not detect_text_corruption(pymupdf_text):
+            print("[INFO] PyMuPDF extraction clean, using it")
+            return pymupdf_text
+
+        print("[WARN] Trying OCR fallback...")
+        ocr_text = extract_text_with_ocr(file_bytes)
+        if ocr_text and not detect_text_corruption(ocr_text):
+            print("[INFO] OCR extraction clean, using it")
+            return ocr_text
+
+        # All methods produced corrupted or empty text — use best available
+        if pymupdf_text:
+            print("[WARN] All extractions corrupted, using PyMuPDF (usually least bad)")
+            return pymupdf_text
+        if ocr_text:
+            print("[WARN] All extractions corrupted, using OCR")
+            return ocr_text
+        print("[WARN] Falling back to corrupted pdfplumber text")
+
+    # If pdfplumber found no text at all, try alternatives
     if not text:
-        try:
-            images = convert_from_bytes(file_bytes)
-            ocr_parts = []
-            for image in images:
-                page_text = pytesseract.image_to_string(image)
-                if page_text.strip():
-                    ocr_parts.append(page_text.strip())
-            text = "\n".join(ocr_parts)
-        except Exception as e:
-            print(f"[ERROR] OCR failed: {e}")
+        pymupdf_text = extract_text_with_pymupdf(file_bytes)
+        if pymupdf_text:
+            return pymupdf_text
+
+        ocr_text = extract_text_with_ocr(file_bytes)
+        if ocr_text:
+            return ocr_text
 
     return text
 
