@@ -597,8 +597,8 @@ async def process_cv_reformat(cv_text: str, turn_context: TurnContext, show_star
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": CV_EXTRACTION_PROMPT},
-                {"role": "user", "content": cv_text}
+                {"role": "system", "content": CV_EXTRACTION_PROMPT + "\n\n<cv_document>\n" + cv_text + "\n</cv_document>"},
+                {"role": "user", "content": "Please extract the structured CV data from the document provided above and return it as JSON."}
             ],
             max_tokens=8000,
             timeout=120
