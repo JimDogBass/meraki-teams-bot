@@ -466,6 +466,217 @@ def parse_cv_json(ai_response: str) -> dict:
         raise ValueError(f"Could not parse CV data as JSON: {e}")
 
 
+def validate_cv_against_source(cv_data: dict, source_text: str) -> dict:
+    """
+    Validate extracted CV data against the original source text to catch hallucinations.
+    Removes content that can't be traced back to the source CV.
+    """
+    source_lower = source_text.lower()
+
+    # Build a set of significant words from the source for fast lookup
+    source_words = set()
+    for w in source_lower.split():
+        cleaned = w.strip('.,;:()[]"\'-–—•·/\\|')
+        if len(cleaned) > 2:
+            source_words.add(cleaned)
+
+    STOP_WORDS = {'the', 'a', 'an', 'and', 'or', 'of', 'in', 'to', 'for', 'with',
+                  'on', 'at', 'by', 'is', 'was', 'are', 'were', 'been', 'be', 'have',
+                  'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+                  'may', 'might', 'can', 'shall', 'from', 'as', 'but', 'not', 'this',
+                  'that', 'it', 'its', 'their', 'they', 'them', 'also', 'including',
+                  'such', 'well', 'across', 'within', 'into', 'over', 'through', 'both',
+                  'while', 'during', 'between', 'each', 'all', 'more', 'new', 'key',
+                  'role', 'work', 'working', 'worked', 'using', 'used', 'based', 'ensure',
+                  'ensuring', 'develop', 'developed', 'developing', 'manage', 'managed',
+                  'managing', 'support', 'supported', 'supporting', 'responsible',
+                  'include', 'included', 'includes', 'various', 'multiple', 'ability',
+                  'strong', 'excellent', 'experience', 'experienced', 'led', 'lead',
+                  'leading', 'provide', 'provided', 'providing'}
+
+    def get_significant_words(text: str) -> list:
+        """Extract significant (non-stop) words from text."""
+        words = [w.strip('.,;:()[]"\'-–—•·/\\|') for w in text.lower().split()]
+        return [w for w in words if len(w) > 2 and w not in STOP_WORDS]
+
+    def text_present(text: str) -> bool:
+        """Check if key words from text appear in the source.
+        For short texts (1-2 words), require exact substring match.
+        For longer texts, require enough significant words to match.
+        """
+        if not text or not text.strip():
+            return True
+
+        text_clean = text.strip()
+        if len(text_clean.split()) <= 2:
+            return text_clean.lower() in source_lower
+
+        significant = get_significant_words(text_clean)
+        if not significant:
+            return True
+
+        matches = sum(1 for w in significant if w in source_words)
+        # Require at least 50% of significant words to be in source
+        return matches >= max(2, len(significant) * 0.5)
+
+    def content_present(text: str) -> bool:
+        """Stricter check for bullet points and content lines.
+        These are the main hallucination risk — require higher word match ratio.
+        """
+        if not text or not text.strip():
+            return True
+
+        text_clean = text.strip()
+        significant = get_significant_words(text_clean)
+        if len(significant) <= 2:
+            # Very short bullet — check exact substring
+            return text_clean.lower() in source_lower
+
+        matches = sum(1 for w in significant if w in source_words)
+        # Require at least 60% of significant words to trace back to source
+        return matches >= max(2, len(significant) * 0.6)
+
+    def validate_bullet_item(item):
+        """Validate a bullet item (string or nested dict). Returns item or None."""
+        if isinstance(item, str):
+            if content_present(item):
+                return item
+            print(f"[HALLUCINATION CHECK] Bullet not in source, removing: '{item[:80]}...'")
+            return None
+        elif isinstance(item, dict):
+            text = item.get("text", "")
+            if text and not content_present(text):
+                print(f"[HALLUCINATION CHECK] Bullet not in source, removing: '{text[:80]}...'")
+                return None
+            # Validate sub-bullets too
+            sub_bullets = item.get("sub_bullets", [])
+            if sub_bullets:
+                validated_subs = [validate_bullet_item(sb) for sb in sub_bullets]
+                item["sub_bullets"] = [sb for sb in validated_subs if sb is not None]
+            return item
+        return item
+
+    # --- Validate work experience ---
+    validated_work = []
+    for job in cv_data.get("work_experience", []):
+        company = job.get("company", "")
+        if company and not text_present(company):
+            print(f"[HALLUCINATION CHECK] Company not found in source, removing: '{company}'")
+            continue
+
+        # Validate section content (bullet points)
+        sections = job.get("sections", [])
+        validated_sections = []
+        for section in sections:
+            content = section.get("content", [])
+            validated_content = [validate_bullet_item(item) for item in content]
+            validated_content = [c for c in validated_content if c is not None]
+            if validated_content or section.get("header", ""):
+                section["content"] = validated_content
+                validated_sections.append(section)
+        job["sections"] = validated_sections
+
+        # Validate old-format bullets too
+        if "bullets" in job:
+            validated_bullets = [validate_bullet_item(b) for b in job["bullets"]]
+            job["bullets"] = [b for b in validated_bullets if b is not None]
+
+        validated_work.append(job)
+    cv_data["work_experience"] = validated_work
+
+    # --- Validate education ---
+    validated_edu = []
+    for edu in cv_data.get("education", []):
+        institution = edu.get("institution", "")
+        title = edu.get("title", "")
+        if institution and not text_present(institution) and title and not text_present(title):
+            print(f"[HALLUCINATION CHECK] Education not found in source, removing: '{institution}' / '{title}'")
+            continue
+        # Validate education details
+        details = edu.get("details", [])
+        validated_details = [d for d in details if content_present(d)]
+        removed = [d for d in details if not content_present(d)]
+        for d in removed:
+            print(f"[HALLUCINATION CHECK] Education detail not in source, removing: '{d[:80]}'")
+        edu["details"] = validated_details
+        validated_edu.append(edu)
+    cv_data["education"] = validated_edu
+
+    # --- Validate professional qualifications ---
+    validated_quals = []
+    for qual in cv_data.get("professional_qualifications", []):
+        if qual and not text_present(qual):
+            print(f"[HALLUCINATION CHECK] Qualification not found in source, removing: '{qual}'")
+            continue
+        validated_quals.append(qual)
+    cv_data["professional_qualifications"] = validated_quals
+
+    # --- Validate profile text ---
+    profile = cv_data.get("profile", "")
+    if profile and not content_present(profile):
+        print(f"[HALLUCINATION CHECK] Profile text not found in source, clearing")
+        cv_data["profile"] = ""
+
+    # --- Validate IT systems ---
+    it_systems = cv_data.get("it_systems", "")
+    if it_systems:
+        validated_systems = []
+        for system in it_systems.split(","):
+            system_clean = system.strip()
+            if system_clean and system_clean.lower() in source_lower:
+                validated_systems.append(system_clean)
+            else:
+                print(f"[HALLUCINATION CHECK] IT system not in source, removing: '{system_clean}'")
+        cv_data["it_systems"] = ", ".join(validated_systems)
+
+    # --- Validate interests ---
+    interests = cv_data.get("interests", "")
+    if interests:
+        validated_interests = []
+        for interest in interests.split(","):
+            interest_clean = interest.strip()
+            if interest_clean and interest_clean.lower() in source_lower:
+                validated_interests.append(interest_clean)
+            else:
+                print(f"[HALLUCINATION CHECK] Interest not in source, removing: '{interest_clean}'")
+        cv_data["interests"] = ", ".join(validated_interests)
+
+    # --- Validate languages ---
+    languages = cv_data.get("languages", "")
+    if languages:
+        validated_langs = []
+        for lang_entry in languages.split(","):
+            lang_name = lang_entry.strip().split("(")[0].strip()
+            if lang_name and lang_name.lower() in source_lower:
+                validated_langs.append(lang_entry.strip())
+            else:
+                print(f"[HALLUCINATION CHECK] Language not in source, removing: '{lang_entry.strip()}'")
+        cv_data["languages"] = ", ".join(validated_langs)
+
+    # --- Validate other_information content ---
+    other_info = cv_data.get("other_information", [])
+    validated_other = []
+    for item in other_info:
+        content = item.get("content", [])
+        if isinstance(content, list):
+            validated_content = [c for c in content if content_present(c)]
+            removed = [c for c in content if not content_present(c)]
+            for c in removed:
+                print(f"[HALLUCINATION CHECK] Other info not in source, removing: '{str(c)[:80]}'")
+            item["content"] = validated_content
+        # Keep the item if it still has content or entries
+        if item.get("content") or item.get("entries"):
+            validated_other.append(item)
+    cv_data["other_information"] = validated_other
+
+    # --- Validate name ---
+    name = cv_data.get("name", "")
+    if name and not text_present(name):
+        print(f"[HALLUCINATION CHECK] WARNING - Candidate name '{name}' not found in source text")
+
+    return cv_data
+
+
 # System prompt for CV extraction - preserves full detail
 CV_EXTRACTION_PROMPT = """You are a CV data extraction assistant. Extract structured information from the provided CV and return it as valid JSON.
 
@@ -490,7 +701,7 @@ REQUIRED JSON STRUCTURE:
   "qualifications": "",
   "languages": "Comma-separated list of languages with proficiency (e.g., English (native), French (proficient), Spanish (conversational))",
   "interests": "Comma-separated list of interests/hobbies (e.g., Travel, volunteering, contemporary art, basketball)",
-  "profile": "The candidate's personal profile/summary/about section - a dedicated paragraph about their career and professional background. NOT hobbies, NOT interests, NOT education descriptions, NOT key skills lists. Must be from a section explicitly labeled Profile/Summary/About. If no such section exists, use empty string.",
+  "profile": "The candidate's personal profile/summary/about section - a dedicated paragraph (or bulleted narrative) about their career and professional background, skills and attributes. NOT hobbies, NOT interests, NOT education descriptions. Must be from a section explicitly labeled Profile, Summary, About, Personal Statement, Skills & Attributes, Key Skills, or Professional Attributes. When the source section is bulleted, preserve each bullet as its own paragraph separated by a blank line (use '\\n\\n' between bullets). If no such section exists, use empty string.",
   "professional_qualifications": [
     "CFA Level 2 Candidate (2026)",
     "Quantamental Academy – Macrosynergy (2025)",
@@ -557,6 +768,28 @@ CRITICAL - TITLE PROGRESSIONS AT THE SAME COMPANY:
   → THREE separate entries, one for each company
 - When in doubt, keep jobs as SEPARATE entries
 
+CRITICAL - ROLE-SPECIFIC DATES VS EMPLOYER TOTAL SPAN:
+- Some CVs put a TOTAL employer date range on the company line AND separate role-specific dates (often in parentheses) on each title line below it.
+- When this happens, the dates for each role MUST come from the role-specific dates next to the title — NOT the total employer span on the company line.
+- Example:
+    "M&G Plc (Treasury & Investment Office)              April 2016 – July 2022
+     Senior Compliance Manager, Advisory                  (July 2021 – July 2022)
+     ...bullets...
+     M&G Plc (Treasury & Investment Office)
+     Manager, Investment Mandate Monitoring               (April 2016 – July 2021)"
+  → TWO entries:
+     - {dates: "Jul 21 - Jul 22", company: "M&G Plc (Treasury & Investment Office)", position: "Senior Compliance Manager, Advisory"}
+     - {dates: "Apr 16 - Jul 21", company: "M&G Plc (Treasury & Investment Office)", position: "Manager, Investment Mandate Monitoring"}
+  → NEVER use "Apr 16 - Jul 22" for the Senior Compliance Manager role — that is the employer's total span, not the role's dates.
+- Another example:
+    "Aurion Capital Management (Toronto, Canada)         March 2001 – May 2013
+     Trading Associate, Equities                          (April 2006 – May 2013)
+     ...bullets...
+     Aurion Capital Management Inc. (Toronto, Canada)
+     Portfolio Administrator                              (March 2001 – April 2006)"
+  → dates for Trading Associate = "Apr 06 - May 13" (NOT "Mar 01 - May 13").
+- Rule of thumb: if a role line has its OWN date range (usually parenthesised), that range ALWAYS wins over any date on the employer/company line.
+
 IMPORTANT - WORK EXPERIENCE SECTIONS:
 - Many CVs organize work experience with SUB-HEADERS followed by bullet points
 - Sub-headers are STANDALONE section titles like "Client Product Strategy & Bespoke Benchmark Design" that appear on their OWN line with bullet points BELOW them
@@ -597,7 +830,8 @@ OTHER RULES:
 - Extract ALL paid/professional roles from the CV as work_experience
 - Non-Profit Boards, Volunteer roles, and Advisory roles should go in "other_information" with full details preserved - but ONLY if they actually exist in the CV
 - Preserve original wording exactly - do NOT paraphrase or add content
-- "profile" should contain the candidate's PERSONAL STATEMENT or ABOUT ME section - typically a dedicated section labeled "Profile", "Summary", "About Me", or "Personal Statement". This is NOT: hobbies/interests text, key skills lists, education study descriptions, course descriptions, or bullet point achievements. Random sentences from hobbies (like "I am a keen golfer") are NOT profiles. If no dedicated profile/summary section exists, set to empty string ""
+- "profile" should contain the candidate's PERSONAL STATEMENT, ABOUT ME, or SKILLS & ATTRIBUTES narrative - typically a dedicated section labeled "Profile", "Summary", "About Me", "Personal Statement", "Skills & Attributes", "Key Skills", or "Professional Attributes". This IS the right home for narrative/bulleted descriptions of the candidate's experience, communication, technical proficiency, and working style (e.g., "Skilled communicator...", "Strong technical proficiency with Bloomberg, Aladdin...", "Highly analytical and detail-oriented..."). This is NOT: hobbies/interests text, education study descriptions, course descriptions, or role-specific bullet achievements from a single job. Random sentences from hobbies (like "I am a keen golfer") are NOT profiles. When the source section uses bullet points, preserve each bullet as its own paragraph joined by "\\n\\n" so they render as separate paragraphs. If no dedicated profile/summary/attributes section exists, set to empty string ""
+- When a "Skills & Attributes" or "Key Skills" section contains narrative prose about the candidate, it belongs in "profile" — do NOT also duplicate it into "other_information". Specific software/system names should still be split out into "it_systems"; the narrative text stays in profile.
 - NEVER use "N/A" for any field - use empty string "" instead
 - "location" should only contain city/country if explicitly stated. If not found, set to empty string ""
 - NEVER infer right_to_work from nationality, citizenship, visa status, or "eligible to work" statements. The right_to_work field must ONLY be filled if the CV has an EXPLICIT "Right to Work:" label. Otherwise set to empty string ""

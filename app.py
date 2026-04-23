@@ -26,7 +26,7 @@ from docx import Document
 from azure.data.tables import TableServiceClient
 from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
 from datetime import datetime, timedelta
-from cv_generator import create_meraki_cv, parse_cv_json, CV_EXTRACTION_PROMPT
+from cv_generator import create_meraki_cv, parse_cv_json, validate_cv_against_source, CV_EXTRACTION_PROMPT
 import re
 from html import unescape
 import msal
@@ -67,6 +67,8 @@ PENDING_ROLE_TTL_SECONDS = 300  # 5 minutes
 ALTERNATIVE_PROFILE_PROMPT = """Based on this CV data, write a short alternative candidate profile (2-3 sentences max).
 
 This is a punchy summary to send alongside the CV to a client. Use "they/their" pronouns. Highlight their key strengths, current situation, and what makes them stand out. Keep it compelling and concise.
+
+CRITICAL: Only reference facts, companies, job titles, qualifications, and skills that are EXPLICITLY present in the CV data below. Do NOT invent, embellish, or assume any details. If you are unsure about a detail, leave it out rather than guessing.
 
 CV Data:
 {cv_json}
@@ -572,6 +574,7 @@ def generate_alternative_profile(cv_json: str) -> str:
                 {"role": "user", "content": ALTERNATIVE_PROFILE_PROMPT.format(cv_json=cv_json)}
             ],
             max_tokens=500,
+            temperature=0,
             timeout=60
         )
         return response.choices[0].message.content.strip()
@@ -601,12 +604,14 @@ async def process_cv_reformat(cv_text: str, turn_context: TurnContext, show_star
                 {"role": "user", "content": "Please extract the structured CV data from the document provided above and return it as JSON."}
             ],
             max_tokens=8000,
+            temperature=0,
             timeout=120
         )
         cv_json_text = response.choices[0].message.content
 
-        # Step 2: Parse JSON and generate Word document
+        # Step 2: Parse JSON, validate against source, and generate Word document
         cv_data = parse_cv_json(cv_json_text)
+        cv_data = validate_cv_against_source(cv_data, cv_text)
         doc_bytes = create_meraki_cv(cv_data)
 
         # Create filename from candidate name
