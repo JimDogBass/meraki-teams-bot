@@ -4,10 +4,12 @@ Single-function bot that reformats CVs with Meraki branding and generates altern
 Stripped down from "Jimmy Content" bot to focus solely on CV reformatting.
 """
 import nest_asyncio
+import asyncio
 nest_asyncio.apply()
+LOOP = asyncio.new_event_loop()
+asyncio.set_event_loop(LOOP)
 
 import os
-import asyncio
 import io
 import time
 import httpx
@@ -18,7 +20,7 @@ import urllib.parse
 from flask import Flask, request, Response
 from botbuilder.core import BotFrameworkAdapter, BotFrameworkAdapterSettings, TurnContext
 from botbuilder.schema import Activity, Attachment
-from openai import AzureOpenAI
+from openai import AzureOpenAI, APITimeoutError
 import pdfplumber
 import pytesseract
 from pdf2image import convert_from_bytes
@@ -597,7 +599,7 @@ async def process_cv_reformat(cv_text: str, turn_context: TurnContext, show_star
     """Process CV text and generate reformatted Word document with alternative profile."""
     try:
         # Step 1: Extract structured CV data using OpenAI
-        response = openai_client.chat.completions.create(
+        extract_kwargs = dict(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": CV_EXTRACTION_PROMPT + "\n\n<cv_document>\n" + cv_text + "\n</cv_document>"},
@@ -605,8 +607,12 @@ async def process_cv_reformat(cv_text: str, turn_context: TurnContext, show_star
             ],
             max_tokens=8000,
             temperature=0,
-            timeout=120
+            timeout=300,
         )
+        try:
+            response = openai_client.chat.completions.create(**extract_kwargs)
+        except APITimeoutError:
+            response = openai_client.chat.completions.create(**extract_kwargs)
         cv_json_text = response.choices[0].message.content
 
         # Step 2: Parse JSON, validate against source, and generate Word document
@@ -873,10 +879,7 @@ def messages():
     async def call_bot():
         await adapter.process_activity(activity, auth_header, on_turn)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(call_bot())
-    loop.close()
+    LOOP.run_until_complete(call_bot())
 
     return Response(status=200)
 
