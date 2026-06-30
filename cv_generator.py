@@ -5,6 +5,7 @@ Logo in header (centered) so it appears on every page.
 import io
 import json
 import os
+import re
 import copy
 from docx import Document
 from docx.shared import Pt, RGBColor, Cm, Inches
@@ -189,40 +190,64 @@ def create_meraki_cv(cv_data: dict) -> bytes:
         add_blank_line(doc)
         add_section_header(doc, "WORK EXPERIENCE")
         add_blank_line(doc)
-        for i, job in enumerate(work_exp):
-            dates = job.get("dates", "")
-            company = job.get("company", "")
-            position = job.get("position", "")
 
-            # Date and company line (bold)
-            add_tabbed_line(doc, dates, company, bold=True)
-
-            # Position line
-            if position:
-                add_position_line(doc, position)
-
-            # Work experience sections (sub-headers with bullet points)
-            sections = job.get("sections", [])
-            if sections:
-                for section in sections:
-                    header = section.get("header", "")
-                    content = section.get("content", [])
-
-                    # Add sub-header if present (bold text, no bullet)
-                    if header:
-                        add_blank_line(doc)
-                        add_work_section_header(doc, header)
-
-                    # Add content as bullet points (supports nested structure)
-                    for item in content:
-                        add_nested_bullets(doc, item)
+        # Group entries by company name (any same-company in the list).
+        # Preserves first-appearance order; same-company entries cluster under one parent header.
+        company_groups = []  # list of lists of jobs
+        company_index = {}   # normalised company name -> position in company_groups
+        for job in work_exp:
+            key = _company_key(job.get("company", ""))
+            if key and key in company_index:
+                company_groups[company_index[key]].append(job)
             else:
-                # Fallback: handle old "bullets" format for backwards compatibility
-                for bullet in job.get("bullets", []):
-                    add_nested_bullets(doc, bullet)
+                if key:
+                    company_index[key] = len(company_groups)
+                company_groups.append([job])
 
-            # Add blank line between jobs (except last)
-            if i < len(work_exp) - 1:
+        for g, group in enumerate(company_groups):
+            # Parent header for multi-role companies
+            if len(group) > 1:
+                combined_dates = _combine_date_ranges([j.get("dates", "") for j in group])
+                add_tabbed_line(doc, combined_dates, group[0].get("company", ""), bold=True)
+
+            for j, job in enumerate(group):
+                dates = job.get("dates", "")
+                company = job.get("company", "")
+                position = job.get("position", "")
+
+                # Date and company line (bold)
+                add_tabbed_line(doc, dates, company, bold=True)
+
+                # Position line
+                if position:
+                    add_position_line(doc, position)
+
+                # Work experience sections (sub-headers with bullet points)
+                sections = job.get("sections", [])
+                if sections:
+                    for section in sections:
+                        header = section.get("header", "")
+                        content = section.get("content", [])
+
+                        # Add sub-header if present (bold text, no bullet)
+                        if header:
+                            add_blank_line(doc)
+                            add_work_section_header(doc, header)
+
+                        # Add content as bullet points (supports nested structure)
+                        for item in content:
+                            add_nested_bullets(doc, item)
+                else:
+                    # Fallback: handle old "bullets" format for backwards compatibility
+                    for bullet in job.get("bullets", []):
+                        add_nested_bullets(doc, bullet)
+
+                # Blank line between sub-roles within a group
+                if j < len(group) - 1:
+                    add_blank_line(doc)
+
+            # Blank line between company groups (except last)
+            if g < len(company_groups) - 1:
                 add_blank_line(doc)
 
     # === OTHER INFORMATION (only if present and has content) ===
@@ -287,6 +312,118 @@ def create_meraki_cv(cv_data: dict) -> bytes:
 def add_blank_line(doc):
     """Add an empty paragraph for spacing."""
     return doc.add_paragraph()
+
+
+_MONTHS = {
+    'jan': 1, 'january': 1,
+    'feb': 2, 'february': 2,
+    'mar': 3, 'march': 3,
+    'apr': 4, 'april': 4,
+    'may': 5,
+    'jun': 6, 'june': 6,
+    'jul': 7, 'july': 7,
+    'aug': 8, 'august': 8,
+    'sep': 9, 'sept': 9, 'september': 9,
+    'oct': 10, 'october': 10,
+    'nov': 11, 'november': 11,
+    'dec': 12, 'december': 12,
+}
+
+_DATE_SEPARATORS = [' – ', ' — ', ' - ', ' to ', '–', '—']
+
+
+def _company_key(name):
+    """Normalise a company name for grouping comparisons."""
+    return re.sub(r'\s+', ' ', (name or '').strip().lower())
+
+
+def _split_date_range(dates_str):
+    """Split a 'start - end' date string into (start, end). Returns (start, None) if no separator."""
+    if not dates_str:
+        return None, None
+    s = dates_str.strip()
+    for sep in _DATE_SEPARATORS:
+        if sep in s:
+            parts = s.split(sep, 1)
+            return parts[0].strip(), parts[1].strip()
+    # Plain hyphen fallback — only split if it looks like a range, not just a hyphenated month name
+    if '-' in s and not s.lower().startswith('present'):
+        parts = s.split('-', 1)
+        return parts[0].strip(), parts[1].strip()
+    return s, None
+
+
+def _parse_date_token(token):
+    """Parse a token like 'Feb 18', 'January 2018', '2018', '02/2018', or 'Present'.
+    Returns (year, month) tuple usable for ordering, or None if unparseable.
+    'Present'/'Current' returns a sentinel that sorts as latest.
+    """
+    if not token:
+        return None
+    s = token.strip().lower()
+    if s in ('present', 'current', 'now', 'today', 'date', 'to date'):
+        return (9999, 12)
+
+    month = None
+    year = None
+    # Numeric forms: MM/YYYY, M/YY, YYYY
+    m = re.match(r'^(\d{1,2})[\s/\-](\d{2,4})$', s)
+    if m:
+        mm = int(m.group(1))
+        yy = int(m.group(2))
+        if 1 <= mm <= 12:
+            month = mm
+        if yy < 100:
+            yy = 2000 + yy if yy <= 50 else 1900 + yy
+        year = yy
+    else:
+        for part in re.split(r'[\s,/]+', s):
+            if not part:
+                continue
+            if part in _MONTHS:
+                month = _MONTHS[part]
+                continue
+            digits = re.sub(r'\D', '', part)
+            if digits:
+                num = int(digits)
+                if num < 100:
+                    num = 2000 + num if num <= 50 else 1900 + num
+                year = num
+
+    if year is None:
+        return None
+    return (year, month or 1)
+
+
+def _combine_date_ranges(date_strings):
+    """Given multiple 'start - end' strings (one per role at the same firm), return a single
+    combined range string covering the earliest start to the latest end. Falls back to
+    array-order assumption when dates can't be parsed.
+    """
+    starts = []  # list of (parsed_tuple_or_None, original_text)
+    ends = []
+    for ds in date_strings:
+        s, e = _split_date_range(ds)
+        if s:
+            starts.append((_parse_date_token(s), s))
+        if e:
+            ends.append((_parse_date_token(e), e))
+
+    def _pick(items, want_min):
+        parsed = [x for x in items if x[0] is not None]
+        if parsed:
+            chosen = min(parsed, key=lambda x: x[0]) if want_min else max(parsed, key=lambda x: x[0])
+            return chosen[1]
+        if items:
+            # Fallback: assume reverse-chronological array order (most recent first)
+            return items[-1][1] if want_min else items[0][1]
+        return ''
+
+    start_text = _pick(starts, want_min=True)
+    end_text = _pick(ends, want_min=False)
+    if start_text and end_text:
+        return f"{start_text} - {end_text}"
+    return start_text or end_text or ''
 
 
 def add_section_header(doc, text):
