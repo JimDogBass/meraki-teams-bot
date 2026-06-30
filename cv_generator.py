@@ -215,12 +215,13 @@ def create_meraki_cv(cv_data: dict) -> bytes:
                 company = job.get("company", "")
                 position = job.get("position", "")
 
-                # Date and company line (bold)
-                add_tabbed_line(doc, dates, company, bold=True)
-
-                # Position line
-                if position:
-                    add_position_line(doc, position)
+                if len(group) > 1:
+                    # Sub-role under parent header: dates + position inline; no company repeat, no "Position:" label
+                    add_tabbed_line(doc, dates, position or company, bold=True)
+                else:
+                    add_tabbed_line(doc, dates, company, bold=True)
+                    if position:
+                        add_position_line(doc, position)
 
                 # Work experience sections (sub-headers with bullet points)
                 sections = job.get("sections", [])
